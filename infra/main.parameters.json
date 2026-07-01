@@ -1,0 +1,87 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "cleanupScheduleFrequency": {
+      "value": "Day"
+    },
+    "cleanupScheduleInterval": {
+      "value": 1
+    },
+    "cleanupScheduleTimeZone": {
+      "value": "UTC"
+    },
+    "logicAppNotificationsEnabled": {
+      "value": true
+    },
+    "logicAppNotifyOnSuccess": {
+      "value": true
+    },
+    "logicAppNotifyOnFailure": {
+      "value": true
+    },
+    "logicAppNotifyOnNoAction": {
+      "value": false
+    },
+    "advancedHuntingEnabled": {
+      "value": true
+    },
+    "advancedHuntingLookbackDays": {
+      "value": 30
+    },
+    "deviceDisableAfterDays": {
+      "value": 90
+    },
+    "deviceDeleteAfterDays": {
+      "value": 120
+    },
+    "exclusionDeviceGroupName": {
+      "value": ""
+    },
+    "exclusionDeviceGroupObjectId": {
+      "value": ""
+    },
+    "disableEnabled": {
+      "value": true
+    },
+    "deleteEnabled": {
+      "value": false
+    },
+    "defenderCheckInExtensionAttributeNumber": {
+      "value": 15
+    },
+    "defenderDynamicGroupEnabled": {
+      "value": true
+    },
+    "defenderDynamicGroupName": {
+      "value": ""
+    },
+    "defenderDynamicGroupRule": {
+      "value": ""
+    },
+    "enableDeleteLock": {
+      "value": true
+    },
+    "intuneCheckInExtensionAttributeNumber": {
+      "value": 14
+    },
+    "intuneDynamicGroupEnabled": {
+      "value": true
+    },
+    "intuneDynamicGroupName": {
+      "value": ""
+    },
+    "intuneDynamicGroupRule": {
+      "value": ""
+    },
+    "maxDeleteCount": {
+      "value": 20
+    },
+    "retentionInDays": {
+      "value": 90
+    },
+    "secretNamePrefix": {
+      "value": "device-cleanup"
+    }
+  }
+}
