@@ -69,7 +69,7 @@ function Ensure-AutomationExtension {
 
 function Get-RunbookContentPath {
   $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
-  $path = Join-Path $repoRoot 'runbooks\DeviceCleanup.ps1'
+  $path = Join-Path $repoRoot 'runbooks/DeviceCleanup.ps1'
 
   if (-not (Test-Path -LiteralPath $path)) {
     throw "Runbook content file was not found at '$path'."
@@ -592,6 +592,7 @@ $logicAppNotifyOnFailure = Get-RequiredEnvironmentValue -Name 'LOGIC_APP_NOTIFY_
 $logicAppNotifyOnNoAction = Get-RequiredEnvironmentValue -Name 'LOGIC_APP_NOTIFY_ON_NO_ACTION'
 $enableDeleteLock = Get-RequiredEnvironmentValue -Name 'ENABLE_DELETE_LOCK'
 $logicAppNotificationCallbackUrl = ''
+$deleteLockIsEnabled = ConvertTo-BooleanValue -Name 'ENABLE_DELETE_LOCK' -Value $enableDeleteLock
 $logicAppNotificationsAreEnabled = ConvertTo-BooleanValue -Name 'LOGIC_APP_NOTIFICATIONS_ENABLED' -Value $logicAppNotificationsEnabled
 if ($logicAppNotificationsAreEnabled) {
   if ([string]::IsNullOrWhiteSpace($logicAppNotificationWorkflowName)) {
@@ -714,7 +715,7 @@ try {
       -Description "Managed by azd-device-cleanup environment '$environmentName'. Default purpose: devices whose Defender-derived extension attribute is stale. Membership rule: $resolvedDefenderGroupRule"
   }
 
-  if ($enableDeleteLock -eq 'true') {
+  if ($deleteLockIsEnabled) {
     Ensure-DeleteLock -SubscriptionId $subscriptionId -ResourceGroupName $resourceGroupName
   }
 }

@@ -111,6 +111,25 @@ function Get-KeyVaultSecretValue {
   return Invoke-KeyVaultJson -Method 'GET' -Uri "https://$VaultName.vault.azure.net/secrets/$SecretName?api-version=7.4"
 }
 
+function Get-SecretTags {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object] $Secret
+  )
+
+  if ($Secret.PSObject.Properties.Name -contains 'tags') {
+    return $Secret.tags
+  }
+
+  if (($Secret.PSObject.Properties.Name -contains 'attributes') -and
+    ($null -ne $Secret.attributes) -and
+    ($Secret.attributes.PSObject.Properties.Name -contains 'tags')) {
+    return $Secret.attributes.tags
+  }
+
+  return $null
+}
+
 function Test-Match {
   param(
     [Parameter(Mandatory = $true)]
@@ -127,10 +146,7 @@ function Test-Match {
     [string] $SecretName
   )
 
-  $tags = $null
-  if ($Secret.attributes.PSObject.Properties.Name -contains 'tags') {
-    $tags = $Secret.attributes.tags
-  }
+  $tags = Get-SecretTags -Secret $Secret
   if (-not [string]::IsNullOrWhiteSpace($SecretName) -and $Secret.id.Split('/')[-1] -ne $SecretName) {
     return $false
   }
@@ -174,10 +190,7 @@ function ConvertTo-Summary {
     [object] $SecretMetadata
   )
 
-  $tags = $null
-  if ($SecretMetadata.attributes.PSObject.Properties.Name -contains 'tags') {
-    $tags = $SecretMetadata.attributes.tags
-  }
+  $tags = Get-SecretTags -Secret $SecretMetadata
   $displayName = $null
   $deviceId = $null
   $entraObjectId = $null
