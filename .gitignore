@@ -1,0 +1,29 @@
+# Azure Automation / PowerShell artifacts
+bin
+obj
+appsettings.json
+local.settings.json
+
+# Azure Developer CLI
+.azure/
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+.history/
+
+# Azurite
+__blobstorage__
+__queuestorage__
+__azurite_db*__.json
+
+# PowerShell
+*.ps1xml
+
+# OS files
+.DS_Store
+Thumbs.db

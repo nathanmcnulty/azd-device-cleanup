@@ -1,0 +1,964 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.42.1.51946",
+      "templateHash": "13923518895405707553"
+    }
+  },
+  "parameters": {
+    "environmentName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "metadata": {
+        "description": "Name of the azd environment used to derive unique resource names."
+      }
+    },
+    "location": {
+      "type": "string",
+      "metadata": {
+        "azd": {
+          "type": "location",
+          "default": "eastus"
+        },
+        "description": "Primary Azure location for all resources."
+      }
+    },
+    "resourceGroupName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional override for the resource group name."
+      }
+    },
+    "automationAccountName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional override for the Automation Account name."
+      }
+    },
+    "automationRuntimeEnvironmentName": {
+      "type": "string",
+      "defaultValue": "PowerShell76",
+      "metadata": {
+        "description": "Optional override for the Azure Automation runtime environment name."
+      }
+    },
+    "automationRunbookName": {
+      "type": "string",
+      "defaultValue": "DeviceCleanup",
+      "metadata": {
+        "description": "Optional override for the Azure Automation runbook name."
+      }
+    },
+    "automationScheduleName": {
+      "type": "string",
+      "defaultValue": "device-cleanup-daily",
+      "metadata": {
+        "description": "Optional override for the Azure Automation schedule name."
+      }
+    },
+    "keyVaultName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional override for the Key Vault name."
+      }
+    },
+    "logicAppNotificationsEnabled": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Deploy the Logic App workflow that receives runbook notification events."
+      }
+    },
+    "logicAppNotificationWorkflowName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional override for the Logic App workflow name."
+      }
+    },
+    "logicAppNotificationWebhookUrl": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional downstream webhook URL that the Logic App should forward notifications to, such as a Teams workflow trigger URL."
+      }
+    },
+    "logicAppNotifyOnSuccess": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Send notifications for successful cleanup runs."
+      }
+    },
+    "logicAppNotifyOnFailure": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Send notifications for failed cleanup runs."
+      }
+    },
+    "logicAppNotifyOnNoAction": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Send notifications for runs that do not find any disable or delete candidates."
+      }
+    },
+    "cleanupScheduleFrequency": {
+      "type": "string",
+      "defaultValue": "Day",
+      "allowedValues": [
+        "Day",
+        "Hour"
+      ],
+      "metadata": {
+        "description": "Recurring frequency for the Azure Automation schedule."
+      }
+    },
+    "cleanupScheduleInterval": {
+      "type": "int",
+      "defaultValue": 1,
+      "minValue": 1,
+      "metadata": {
+        "description": "Recurring interval for the Azure Automation schedule."
+      }
+    },
+    "cleanupScheduleTimeZone": {
+      "type": "string",
+      "defaultValue": "UTC",
+      "metadata": {
+        "description": "Time zone used by the Azure Automation schedule."
+      }
+    },
+    "cleanupScheduleStartTime": {
+      "type": "string",
+      "defaultValue": "[dateTimeAdd(utcNow('u'), 'PT15M')]",
+      "metadata": {
+        "description": "Start time for the Azure Automation schedule."
+      }
+    },
+    "deviceDisableAfterDays": {
+      "type": "int",
+      "defaultValue": 90,
+      "minValue": 1,
+      "metadata": {
+        "description": "Disable devices that have not signed in for at least this many days."
+      }
+    },
+    "deviceDeleteAfterDays": {
+      "type": "int",
+      "defaultValue": 120,
+      "minValue": 1,
+      "metadata": {
+        "description": "Delete already-disabled devices that have not signed in for at least this many days."
+      }
+    },
+    "disableEnabled": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Default true so stale devices are disabled automatically after the configured threshold."
+      }
+    },
+    "maxDeleteCount": {
+      "type": "int",
+      "defaultValue": 20,
+      "minValue": 1,
+      "metadata": {
+        "description": "Abort the run if more than this many stale devices are found."
+      }
+    },
+    "deleteEnabled": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Safe default. Devices are never deleted until you explicitly set this to true."
+      }
+    },
+    "intuneCheckInExtensionAttributeNumber": {
+      "type": "int",
+      "defaultValue": 14,
+      "minValue": 0,
+      "maxValue": 15,
+      "metadata": {
+        "description": "Device extensionAttribute slot used for the derived Intune check-in value. Set to 0 to disable this enrichment."
+      }
+    },
+    "defenderCheckInExtensionAttributeNumber": {
+      "type": "int",
+      "defaultValue": 15,
+      "minValue": 0,
+      "maxValue": 15,
+      "metadata": {
+        "description": "Device extensionAttribute slot used for the derived Defender for Endpoint check-in value. Set to 0 to disable this enrichment."
+      }
+    },
+    "exclusionDeviceGroupObjectId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional object ID of an existing Microsoft Entra security group whose device members should be excluded from disable/delete actions. Leave empty to create or reuse a group by name."
+      }
+    },
+    "exclusionDeviceGroupName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional display name override for the Microsoft Entra exclusion security group. Leave empty to use an environment-based default."
+      }
+    },
+    "intuneDynamicGroupEnabled": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Create or update a Microsoft Entra dynamic device group for the Intune check-in attribute."
+      }
+    },
+    "intuneDynamicGroupName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional display name override for the Intune dynamic device group. Leave empty to use an environment-based default."
+      }
+    },
+    "intuneDynamicGroupRule": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional membership rule override for the Intune dynamic device group. Leave empty to use the configured Intune extensionAttribute slot and stale-state rule."
+      }
+    },
+    "defenderDynamicGroupEnabled": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Create or update a Microsoft Entra dynamic device group for the Defender for Endpoint check-in attribute."
+      }
+    },
+    "defenderDynamicGroupName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional display name override for the Defender for Endpoint dynamic device group. Leave empty to use an environment-based default."
+      }
+    },
+    "defenderDynamicGroupRule": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional membership rule override for the Defender for Endpoint dynamic device group. Leave empty to use the configured Defender extensionAttribute slot and stale-state rule."
+      }
+    },
+    "advancedHuntingEnabled": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable Microsoft Graph advanced hunting queries as an additional heartbeat signal source."
+      }
+    },
+    "advancedHuntingLookbackDays": {
+      "type": "int",
+      "defaultValue": 30,
+      "minValue": 1,
+      "maxValue": 90,
+      "metadata": {
+        "description": "Lookback window in days for Microsoft Graph advanced hunting heartbeat queries."
+      }
+    },
+    "secretNamePrefix": {
+      "type": "string",
+      "defaultValue": "device-cleanup",
+      "metadata": {
+        "description": "Prefix for archived device secrets in Key Vault."
+      }
+    },
+    "archiveReaderPrincipalId": {
+      "type": "string",
+      "defaultValue": "[deployer().objectId]",
+      "metadata": {
+        "description": "Optional principal that should receive read access to archived secrets."
+      }
+    },
+    "retentionInDays": {
+      "type": "int",
+      "defaultValue": 90,
+      "minValue": 7,
+      "maxValue": 90,
+      "metadata": {
+        "description": "Retention period in days for Key Vault soft delete recovery."
+      }
+    },
+    "enableDeleteLock": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable a CanNotDelete management lock on the deployed resource group."
+      }
+    }
+  },
+  "variables": {
+    "resourceToken": "[toLower(uniqueString(subscription().id, parameters('environmentName'), parameters('location')))]",
+    "tags": {
+      "azd-env-name": "[parameters('environmentName')]",
+      "environment": "[parameters('environmentName')]",
+      "managed-by": "azd",
+      "purpose": "device-cleanup",
+      "workload": "device-cleanup"
+    },
+    "rgName": "[if(empty(parameters('resourceGroupName')), format('rg-{0}', parameters('environmentName')), parameters('resourceGroupName'))]",
+    "automationName": "[if(empty(parameters('automationAccountName')), format('aa-{0}', take(variables('resourceToken'), 20)), parameters('automationAccountName'))]",
+    "vaultName": "[if(empty(parameters('keyVaultName')), format('kv-{0}', take(variables('resourceToken'), 21)), parameters('keyVaultName'))]",
+    "logicAppWorkflowName": "[if(empty(parameters('logicAppNotificationWorkflowName')), format('la-{0}-cleanup', take(variables('resourceToken'), 20)), parameters('logicAppNotificationWorkflowName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('rgName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]"
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "device-cleanup-resources",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "automationAccountName": {
+            "value": "[variables('automationName')]"
+          },
+          "automationRunbookName": {
+            "value": "[parameters('automationRunbookName')]"
+          },
+          "automationRuntimeEnvironmentName": {
+            "value": "[parameters('automationRuntimeEnvironmentName')]"
+          },
+          "automationScheduleName": {
+            "value": "[parameters('automationScheduleName')]"
+          },
+          "archiveReaderPrincipalId": {
+            "value": "[parameters('archiveReaderPrincipalId')]"
+          },
+          "cleanupScheduleFrequency": {
+            "value": "[parameters('cleanupScheduleFrequency')]"
+          },
+          "cleanupScheduleInterval": {
+            "value": "[parameters('cleanupScheduleInterval')]"
+          },
+          "cleanupScheduleStartTime": {
+            "value": "[parameters('cleanupScheduleStartTime')]"
+          },
+          "cleanupScheduleTimeZone": {
+            "value": "[parameters('cleanupScheduleTimeZone')]"
+          },
+          "keyVaultName": {
+            "value": "[variables('vaultName')]"
+          },
+          "logicAppNotificationWebhookUrl": {
+            "value": "[parameters('logicAppNotificationWebhookUrl')]"
+          },
+          "logicAppNotificationWorkflowName": {
+            "value": "[variables('logicAppWorkflowName')]"
+          },
+          "logicAppNotificationsEnabled": {
+            "value": "[parameters('logicAppNotificationsEnabled')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "retentionInDays": {
+            "value": "[parameters('retentionInDays')]"
+          },
+          "secretNamePrefix": {
+            "value": "[parameters('secretNamePrefix')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "3738357049458936118"
+            }
+          },
+          "parameters": {
+            "automationAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Automation Account name."
+              }
+            },
+            "automationRuntimeEnvironmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Automation runtime environment name."
+              }
+            },
+            "automationRunbookName": {
+              "type": "string",
+              "metadata": {
+                "description": "Automation runbook name."
+              }
+            },
+            "automationScheduleName": {
+              "type": "string",
+              "metadata": {
+                "description": "Automation schedule name."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Primary Azure location for all resources."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Common resource tags."
+              }
+            },
+            "keyVaultName": {
+              "type": "string",
+              "metadata": {
+                "description": "Key Vault name."
+              }
+            },
+            "logicAppNotificationsEnabled": {
+              "type": "bool",
+              "defaultValue": true,
+              "metadata": {
+                "description": "Deploy the Logic App workflow that receives runbook notification events."
+              }
+            },
+            "logicAppNotificationWorkflowName": {
+              "type": "string",
+              "metadata": {
+                "description": "Logic App workflow name."
+              }
+            },
+            "logicAppNotificationWebhookUrl": {
+              "type": "securestring",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional downstream webhook URL that the Logic App should forward notifications to, such as a Teams workflow trigger URL."
+              }
+            },
+            "cleanupScheduleFrequency": {
+              "type": "string",
+              "allowedValues": [
+                "Day",
+                "Hour"
+              ],
+              "metadata": {
+                "description": "Recurring frequency for the Azure Automation schedule."
+              }
+            },
+            "cleanupScheduleInterval": {
+              "type": "int",
+              "minValue": 1,
+              "metadata": {
+                "description": "Recurring interval for the Azure Automation schedule."
+              }
+            },
+            "cleanupScheduleStartTime": {
+              "type": "string",
+              "metadata": {
+                "description": "Start time for the Azure Automation schedule."
+              }
+            },
+            "cleanupScheduleTimeZone": {
+              "type": "string",
+              "metadata": {
+                "description": "Time zone used by the Azure Automation schedule."
+              }
+            },
+            "secretNamePrefix": {
+              "type": "string",
+              "metadata": {
+                "description": "Prefix for archived device secrets in Key Vault."
+              }
+            },
+            "archiveReaderPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional principal that should receive read access to archived secrets."
+              }
+            },
+            "retentionInDays": {
+              "type": "int",
+              "minValue": 7,
+              "maxValue": 90,
+              "metadata": {
+                "description": "Retention period in days for Key Vault soft delete recovery."
+              }
+            }
+          },
+          "variables": {
+            "keyVaultSecretsOfficerRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7')]",
+            "keyVaultSecretsUserRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.KeyVault/vaults",
+              "apiVersion": "2023-07-01",
+              "name": "[parameters('keyVaultName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "enablePurgeProtection": true,
+                "enableRbacAuthorization": true,
+                "enabledForDeployment": false,
+                "enabledForDiskEncryption": false,
+                "enabledForTemplateDeployment": false,
+                "publicNetworkAccess": "Enabled",
+                "sku": {
+                  "family": "A",
+                  "name": "standard"
+                },
+                "softDeleteRetentionInDays": "[parameters('retentionInDays')]",
+                "tenantId": "[tenant().tenantId]"
+              }
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts",
+              "apiVersion": "2024-10-23",
+              "name": "[parameters('automationAccountName')]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "disableLocalAuth": false,
+                "encryption": {
+                  "keySource": "Microsoft.Automation"
+                },
+                "publicNetworkAccess": true,
+                "sku": {
+                  "name": "Basic"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts/runtimeEnvironments",
+              "apiVersion": "2024-10-23",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), parameters('automationRuntimeEnvironmentName'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "defaultPackages": {},
+                "description": "PowerShell 7.6 runtime environment for the device cleanup runbook.",
+                "runtime": {
+                  "language": "PowerShell",
+                  "version": "7.6"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts/runbooks",
+              "apiVersion": "2024-10-23",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), parameters('automationRunbookName'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "description": "Disables stale Entra devices, archives recovery material to Key Vault, and deletes eligible devices.",
+                "draft": {},
+                "logActivityTrace": 0,
+                "logProgress": true,
+                "logVerbose": true,
+                "runbookType": "PowerShell",
+                "runtimeEnvironment": "[parameters('automationRuntimeEnvironmentName')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+                "[resourceId('Microsoft.Automation/automationAccounts/runtimeEnvironments', parameters('automationAccountName'), parameters('automationRuntimeEnvironmentName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts/schedules",
+              "apiVersion": "2024-10-23",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), parameters('automationScheduleName'))]",
+              "properties": {
+                "description": "Runs the device cleanup runbook on its recurring schedule.",
+                "frequency": "[parameters('cleanupScheduleFrequency')]",
+                "interval": "[parameters('cleanupScheduleInterval')]",
+                "startTime": "[parameters('cleanupScheduleStartTime')]",
+                "timeZone": "[parameters('cleanupScheduleTimeZone')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+              ]
+            },
+            {
+              "condition": "[parameters('logicAppNotificationsEnabled')]",
+              "type": "Microsoft.Logic/workflows",
+              "apiVersion": "2019-05-01",
+              "name": "[parameters('logicAppNotificationWorkflowName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "definition": {
+                  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                  "contentVersion": "1.0.0.0",
+                  "parameters": {
+                    "forwardNotifications": {
+                      "type": "Bool",
+                      "defaultValue": false
+                    },
+                    "notificationWebhookUrl": {
+                      "type": "String",
+                      "defaultValue": ""
+                    }
+                  },
+                  "triggers": {
+                    "manual": {
+                      "type": "Request",
+                      "kind": "Http",
+                      "inputs": {
+                        "schema": {
+                          "type": "object",
+                          "properties": {
+                            "environmentName": {
+                              "type": "string"
+                            },
+                            "subscriptionId": {
+                              "type": "string"
+                            },
+                            "resourceGroupName": {
+                              "type": "string"
+                            },
+                            "automationAccountName": {
+                              "type": "string"
+                            },
+                            "runbookName": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string"
+                            },
+                            "severity": {
+                              "type": "string"
+                            },
+                            "summaryText": {
+                              "type": "string"
+                            },
+                            "startedAtUtc": {
+                              "type": "string"
+                            },
+                            "finishedAtUtc": {
+                              "type": "string"
+                            },
+                            "counts": {
+                              "type": "object"
+                            },
+                            "results": {
+                              "type": "object"
+                            },
+                            "failure": {
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "environmentName",
+                            "status",
+                            "severity",
+                            "summaryText",
+                            "startedAtUtc",
+                            "finishedAtUtc"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "actions": {
+                    "Forward_to_downstream_webhook": {
+                      "type": "If",
+                      "expression": {
+                        "and": [
+                          {
+                            "equals": [
+                              "@parameters('forwardNotifications')",
+                              true
+                            ]
+                          }
+                        ]
+                      },
+                      "actions": {
+                        "Post_notification": {
+                          "type": "Http",
+                          "inputs": {
+                            "method": "POST",
+                            "uri": "@parameters('notificationWebhookUrl')",
+                            "headers": {
+                              "Content-Type": "application/json"
+                            },
+                            "body": "@triggerBody()"
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {}
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "outputs": {}
+                },
+                "parameters": {
+                  "forwardNotifications": {
+                    "value": "[not(empty(parameters('logicAppNotificationWebhookUrl')))]"
+                  },
+                  "notificationWebhookUrl": {
+                    "value": "[parameters('logicAppNotificationWebhookUrl')]"
+                  }
+                },
+                "state": "Enabled"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), parameters('automationAccountName'), 'KeyVaultSecretsOfficer')]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), '2024-10-23', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[variables('keyVaultSecretsOfficerRoleId')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('archiveReaderPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), parameters('archiveReaderPrincipalId'), 'KeyVaultSecretsUser')]",
+              "properties": {
+                "principalId": "[parameters('archiveReaderPrincipalId')]",
+                "roleDefinitionId": "[variables('keyVaultSecretsUserRoleId')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "AUTOMATION_ACCOUNT_NAME": {
+              "type": "string",
+              "value": "[parameters('automationAccountName')]"
+            },
+            "AUTOMATION_ACCOUNT_PRINCIPAL_ID": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), '2024-10-23', 'full').identity.principalId]"
+            },
+            "AUTOMATION_RUNBOOK_NAME": {
+              "type": "string",
+              "value": "[parameters('automationRunbookName')]"
+            },
+            "AUTOMATION_RUNTIME_ENVIRONMENT_NAME": {
+              "type": "string",
+              "value": "[parameters('automationRuntimeEnvironmentName')]"
+            },
+            "AUTOMATION_SCHEDULE_NAME": {
+              "type": "string",
+              "value": "[parameters('automationScheduleName')]"
+            },
+            "DEVICE_ARCHIVE_KEY_VAULT_NAME": {
+              "type": "string",
+              "value": "[parameters('keyVaultName')]"
+            },
+            "DEVICE_SECRET_PREFIX": {
+              "type": "string",
+              "value": "[parameters('secretNamePrefix')]"
+            },
+            "LOGIC_APP_NOTIFICATION_WORKFLOW_NAME": {
+              "type": "string",
+              "value": "[if(parameters('logicAppNotificationsEnabled'), parameters('logicAppNotificationWorkflowName'), '')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "AZURE_LOCATION": {
+      "type": "string",
+      "value": "[parameters('location')]"
+    },
+    "AZURE_RESOURCE_GROUP": {
+      "type": "string",
+      "value": "[variables('rgName')]"
+    },
+    "AZURE_SUBSCRIPTION_ID": {
+      "type": "string",
+      "value": "[subscription().subscriptionId]"
+    },
+    "AZURE_TENANT_ID": {
+      "type": "string",
+      "value": "[tenant().tenantId]"
+    },
+    "AUTOMATION_ACCOUNT_NAME": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'device-cleanup-resources'), '2025-04-01').outputs.AUTOMATION_ACCOUNT_NAME.value]"
+    },
+    "AUTOMATION_ACCOUNT_PRINCIPAL_ID": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'device-cleanup-resources'), '2025-04-01').outputs.AUTOMATION_ACCOUNT_PRINCIPAL_ID.value]"
+    },
+    "AUTOMATION_RUNBOOK_NAME": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'device-cleanup-resources'), '2025-04-01').outputs.AUTOMATION_RUNBOOK_NAME.value]"
+    },
+    "AUTOMATION_RUNTIME_ENVIRONMENT_NAME": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'device-cleanup-resources'), '2025-04-01').outputs.AUTOMATION_RUNTIME_ENVIRONMENT_NAME.value]"
+    },
+    "AUTOMATION_SCHEDULE_NAME": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'device-cleanup-resources'), '2025-04-01').outputs.AUTOMATION_SCHEDULE_NAME.value]"
+    },
+    "ADVANCED_HUNTING_ENABLED": {
+      "type": "string",
+      "value": "[if(parameters('advancedHuntingEnabled'), 'true', 'false')]"
+    },
+    "ADVANCED_HUNTING_LOOKBACK_DAYS": {
+      "type": "string",
+      "value": "[string(parameters('advancedHuntingLookbackDays'))]"
+    },
+    "CLEANUP_SCHEDULE_FREQUENCY": {
+      "type": "string",
+      "value": "[parameters('cleanupScheduleFrequency')]"
+    },
+    "CLEANUP_SCHEDULE_INTERVAL": {
+      "type": "string",
+      "value": "[string(parameters('cleanupScheduleInterval'))]"
+    },
+    "CLEANUP_SCHEDULE_START_TIME": {
+      "type": "string",
+      "value": "[parameters('cleanupScheduleStartTime')]"
+    },
+    "CLEANUP_SCHEDULE_TIME_ZONE": {
+      "type": "string",
+      "value": "[parameters('cleanupScheduleTimeZone')]"
+    },
+    "DEVICE_ARCHIVE_KEY_VAULT_NAME": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'device-cleanup-resources'), '2025-04-01').outputs.DEVICE_ARCHIVE_KEY_VAULT_NAME.value]"
+    },
+    "DEVICE_DELETE_AFTER_DAYS": {
+      "type": "string",
+      "value": "[string(parameters('deviceDeleteAfterDays'))]"
+    },
+    "DEVICE_DELETE_ENABLED": {
+      "type": "string",
+      "value": "[if(parameters('deleteEnabled'), 'true', 'false')]"
+    },
+    "DEVICE_DISABLE_AFTER_DAYS": {
+      "type": "string",
+      "value": "[string(parameters('deviceDisableAfterDays'))]"
+    },
+    "DEVICE_DISABLE_ENABLED": {
+      "type": "string",
+      "value": "[if(parameters('disableEnabled'), 'true', 'false')]"
+    },
+    "EXCLUSION_DEVICE_GROUP_NAME": {
+      "type": "string",
+      "value": "[parameters('exclusionDeviceGroupName')]"
+    },
+    "EXCLUSION_DEVICE_GROUP_OBJECT_ID": {
+      "type": "string",
+      "value": "[parameters('exclusionDeviceGroupObjectId')]"
+    },
+    "DEFENDER_DYNAMIC_GROUP_ENABLED": {
+      "type": "string",
+      "value": "[if(parameters('defenderDynamicGroupEnabled'), 'true', 'false')]"
+    },
+    "DEFENDER_DYNAMIC_GROUP_NAME": {
+      "type": "string",
+      "value": "[parameters('defenderDynamicGroupName')]"
+    },
+    "DEFENDER_DYNAMIC_GROUP_RULE": {
+      "type": "string",
+      "value": "[parameters('defenderDynamicGroupRule')]"
+    },
+    "DEFENDER_CHECKIN_ATTRIBUTE_NUMBER": {
+      "type": "string",
+      "value": "[string(parameters('defenderCheckInExtensionAttributeNumber'))]"
+    },
+    "DEVICE_MAX_DELETE_COUNT": {
+      "type": "string",
+      "value": "[string(parameters('maxDeleteCount'))]"
+    },
+    "DEVICE_SECRET_PREFIX": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'device-cleanup-resources'), '2025-04-01').outputs.DEVICE_SECRET_PREFIX.value]"
+    },
+    "ENABLE_DELETE_LOCK": {
+      "type": "string",
+      "value": "[if(parameters('enableDeleteLock'), 'true', 'false')]"
+    },
+    "INTUNE_DYNAMIC_GROUP_ENABLED": {
+      "type": "string",
+      "value": "[if(parameters('intuneDynamicGroupEnabled'), 'true', 'false')]"
+    },
+    "INTUNE_DYNAMIC_GROUP_NAME": {
+      "type": "string",
+      "value": "[parameters('intuneDynamicGroupName')]"
+    },
+    "INTUNE_DYNAMIC_GROUP_RULE": {
+      "type": "string",
+      "value": "[parameters('intuneDynamicGroupRule')]"
+    },
+    "INTUNE_CHECKIN_ATTRIBUTE_NUMBER": {
+      "type": "string",
+      "value": "[string(parameters('intuneCheckInExtensionAttributeNumber'))]"
+    },
+    "LOGIC_APP_NOTIFICATIONS_ENABLED": {
+      "type": "string",
+      "value": "[if(parameters('logicAppNotificationsEnabled'), 'true', 'false')]"
+    },
+    "LOGIC_APP_NOTIFICATION_WORKFLOW_NAME": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'device-cleanup-resources'), '2025-04-01').outputs.LOGIC_APP_NOTIFICATION_WORKFLOW_NAME.value]"
+    },
+    "LOGIC_APP_NOTIFY_ON_FAILURE": {
+      "type": "string",
+      "value": "[if(parameters('logicAppNotifyOnFailure'), 'true', 'false')]"
+    },
+    "LOGIC_APP_NOTIFY_ON_NO_ACTION": {
+      "type": "string",
+      "value": "[if(parameters('logicAppNotifyOnNoAction'), 'true', 'false')]"
+    },
+    "LOGIC_APP_NOTIFY_ON_SUCCESS": {
+      "type": "string",
+      "value": "[if(parameters('logicAppNotifyOnSuccess'), 'true', 'false')]"
+    }
+  }
+}
