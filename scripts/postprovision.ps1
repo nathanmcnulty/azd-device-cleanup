@@ -1,5 +1,33 @@
 $ErrorActionPreference = 'Stop'
 
+function Get-AzdEnvironmentValues {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $RepositoryRoot
+  )
+
+  Push-Location $RepositoryRoot
+  try {
+    $values = @{}
+    foreach ($line in @(azd env get-values 2>$null)) {
+      if ($line -match '^([A-Z0-9_]+)=(.*)$') {
+        $name = $matches[1]
+        $value = $matches[2].Trim()
+        if ($value.StartsWith('"') -and $value.EndsWith('"')) {
+          $value = $value.Substring(1, $value.Length - 2)
+        }
+
+        $values[$name] = $value
+      }
+    }
+
+    return $values
+  }
+  finally {
+    Pop-Location
+  }
+}
+
 function Get-RequiredEnvironmentValue {
   param(
     [Parameter(Mandatory = $true)]
@@ -7,6 +35,14 @@ function Get-RequiredEnvironmentValue {
   )
 
   $value = [Environment]::GetEnvironmentVariable($Name)
+  if ([string]::IsNullOrWhiteSpace($value) -and $null -eq $script:AzdEnvironmentValues) {
+    $script:AzdEnvironmentValues = Get-AzdEnvironmentValues -RepositoryRoot (Resolve-Path (Join-Path $PSScriptRoot '..'))
+  }
+
+  if ([string]::IsNullOrWhiteSpace($value) -and $null -ne $script:AzdEnvironmentValues -and $script:AzdEnvironmentValues.ContainsKey($Name)) {
+    $value = $script:AzdEnvironmentValues[$Name]
+  }
+
   if ([string]::IsNullOrWhiteSpace($value)) {
     throw "Required environment value '$Name' is missing. Make sure azd provision completed successfully."
   }
@@ -22,6 +58,14 @@ function Get-OptionalEnvironmentValue {
   )
 
   $value = [Environment]::GetEnvironmentVariable($Name)
+  if ($null -eq $value -and $null -eq $script:AzdEnvironmentValues) {
+    $script:AzdEnvironmentValues = Get-AzdEnvironmentValues -RepositoryRoot (Resolve-Path (Join-Path $PSScriptRoot '..'))
+  }
+
+  if ($null -eq $value -and $null -ne $script:AzdEnvironmentValues -and $script:AzdEnvironmentValues.ContainsKey($Name)) {
+    $value = $script:AzdEnvironmentValues[$Name]
+  }
+
   if ($null -eq $value) {
     return $Default
   }
@@ -532,6 +576,40 @@ function Ensure-AppRoleAssignments {
   }
 }
 
+function Remove-AppRoleAssignments {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $PrincipalId,
+    [Parameter(Mandatory = $true)]
+    [object] $ResourceServicePrincipal,
+    [Parameter(Mandatory = $true)]
+    [string[]] $PermissionNames,
+    [Parameter(Mandatory = $true)]
+    [System.Collections.ArrayList] $ExistingAssignments
+  )
+
+  foreach ($permissionName in $PermissionNames) {
+    $appRole = $ResourceServicePrincipal.appRoles | Where-Object {
+      $_.value -eq $permissionName -and $_.allowedMemberTypes -contains 'Application'
+    } | Select-Object -First 1
+
+    if (-not $appRole) {
+      continue
+    }
+
+    $matchingAssignments = @($ExistingAssignments | Where-Object {
+        $_.resourceId -eq $ResourceServicePrincipal.id -and $_.appRoleId -eq $appRole.id
+      })
+
+    foreach ($assignment in $matchingAssignments) {
+      Invoke-GraphJson `
+        -Method 'DELETE' `
+        -Url "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalId/appRoleAssignments/$($assignment.id)" | Out-Null
+      Write-Host "Removed app role: $($ResourceServicePrincipal.displayName) / $permissionName"
+    }
+  }
+}
+
 Ensure-AzureCli
 Ensure-AutomationExtension
 Ensure-AzAutomationModule
@@ -544,23 +622,44 @@ foreach ($assignment in @((Invoke-GraphJson -Method 'GET' -Url "https://graph.mi
   [void] $existingAssignments.Add($assignment)
 }
 
-Ensure-AppRoleAssignments -PrincipalId $principalId -ResourceServicePrincipal $graphSp -PermissionNames @(
+$defenderCheckInAttributeNumber = [int](Get-RequiredEnvironmentValue -Name 'DEFENDER_CHECKIN_ATTRIBUTE_NUMBER')
+$defenderApiEnabled = $defenderCheckInAttributeNumber -gt 0
+$advancedHuntingEnabled = ConvertTo-BooleanValue -Name 'ADVANCED_HUNTING_ENABLED' -Value (Get-RequiredEnvironmentValue -Name 'ADVANCED_HUNTING_ENABLED')
+$graphPermissionNames = @(
   'Device.Read.All',
   'Device.ReadWrite.All',
   'Group.Read.All',
   'GroupMember.Read.All',
   'DeviceLocalCredential.Read.All',
   'BitlockerKey.Read.All',
-  'DeviceManagementManagedDevices.Read.All',
-  'ThreatHunting.Read.All'
-) -ExistingAssignments $existingAssignments
+  'DeviceManagementManagedDevices.Read.All'
+)
+if ($advancedHuntingEnabled) {
+  $graphPermissionNames += 'ThreatHunting.Read.All'
+}
 
-Ensure-AppRoleAssignments -PrincipalId $principalId -ResourceServicePrincipal $defenderSp -PermissionNames @(
-  'Machine.Read.All'
-) -ExistingAssignments $existingAssignments
+Ensure-AppRoleAssignments -PrincipalId $principalId -ResourceServicePrincipal $graphSp -PermissionNames $graphPermissionNames -ExistingAssignments $existingAssignments
+
+if (-not $advancedHuntingEnabled) {
+  Remove-AppRoleAssignments -PrincipalId $principalId -ResourceServicePrincipal $graphSp -PermissionNames @(
+    'ThreatHunting.Read.All'
+  ) -ExistingAssignments $existingAssignments
+}
+
+if ($defenderApiEnabled) {
+  Ensure-AppRoleAssignments -PrincipalId $principalId -ResourceServicePrincipal $defenderSp -PermissionNames @(
+    'Machine.Read.All'
+  ) -ExistingAssignments $existingAssignments
+}
+else {
+  Remove-AppRoleAssignments -PrincipalId $principalId -ResourceServicePrincipal $defenderSp -PermissionNames @(
+    'Machine.Read.All'
+  ) -ExistingAssignments $existingAssignments
+}
 
 $subscriptionId = Get-RequiredEnvironmentValue -Name 'AZURE_SUBSCRIPTION_ID'
 $tenantId = Get-RequiredEnvironmentValue -Name 'AZURE_TENANT_ID'
+$null = az account set --subscription $subscriptionId --only-show-errors
 $environmentName = Get-RequiredEnvironmentValue -Name 'AZURE_ENV_NAME'
 $resourceGroupName = Get-RequiredEnvironmentValue -Name 'AZURE_RESOURCE_GROUP'
 $automationAccountName = Get-RequiredEnvironmentValue -Name 'AUTOMATION_ACCOUNT_NAME'
@@ -583,7 +682,6 @@ $intuneDynamicGroupRule = Get-OptionalEnvironmentValue -Name 'INTUNE_DYNAMIC_GRO
 $defenderDynamicGroupEnabled = Get-RequiredEnvironmentValue -Name 'DEFENDER_DYNAMIC_GROUP_ENABLED'
 $defenderDynamicGroupName = Get-OptionalEnvironmentValue -Name 'DEFENDER_DYNAMIC_GROUP_NAME'
 $defenderDynamicGroupRule = Get-OptionalEnvironmentValue -Name 'DEFENDER_DYNAMIC_GROUP_RULE'
-$advancedHuntingEnabled = Get-RequiredEnvironmentValue -Name 'ADVANCED_HUNTING_ENABLED'
 $advancedHuntingLookbackDays = Get-RequiredEnvironmentValue -Name 'ADVANCED_HUNTING_LOOKBACK_DAYS'
 $logicAppNotificationsEnabled = Get-RequiredEnvironmentValue -Name 'LOGIC_APP_NOTIFICATIONS_ENABLED'
 $logicAppNotificationWorkflowName = Get-OptionalEnvironmentValue -Name 'LOGIC_APP_NOTIFICATION_WORKFLOW_NAME'
@@ -643,6 +741,7 @@ try {
   az automation runbook replace-content `
     --automation-account-name $automationAccountName `
     --resource-group $resourceGroupName `
+    --subscription $subscriptionId `
     --name $runbookName `
     --content "@$renderedRunbookPath" `
     --only-show-errors | Out-Null
@@ -650,6 +749,7 @@ try {
   az automation runbook publish `
     --automation-account-name $automationAccountName `
     --resource-group $resourceGroupName `
+    --subscription $subscriptionId `
     --name $runbookName `
     --only-show-errors | Out-Null
 

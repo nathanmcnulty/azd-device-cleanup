@@ -38,7 +38,7 @@ flowchart LR
     B --> C[Query Entra devices]
     B --> D[Query Intune managed devices]
     B --> E[Query Defender machines]
-    B --> F[Run Graph advanced hunting query]
+    B --> F[Run optional Graph advanced hunting query]
     B --> G[Update device extensionAttributes]
     B --> H[Get LAPS and BitLocker data]
     B --> I[Write archive to Key Vault]
@@ -123,8 +123,8 @@ Each archived device is stored as a JSON secret like:
     "state": "Fresh",
     "lastSeen": "2026-02-28T00:00:00.0000000Z",
     "machineId": "mde-machine-id",
-    "computerDnsName": "LT-12345.contoso.com",
-    "healthStatus": "Active",
+    "deviceName": "LT-12345",
+    "sensorHealthState": "Active",
     "onboardingStatus": "Onboarded",
     "extensionAttributeValue": "Fresh|2026-02-28T00:00:00.0000000Z"
   },
@@ -193,15 +193,11 @@ The Automation Account managed identity needs these **Microsoft Graph** app role
 - `Group.Read.All`
 - `GroupMember.Read.All`
 - `DeviceManagementManagedDevices.Read.All`
-- `ThreatHunting.Read.All`
+- `ThreatHunting.Read.All` when `advancedHuntingEnabled=true`
 - `DeviceLocalCredential.Read.All`
 - `BitlockerKey.Read.All`
 
-It also needs this **Microsoft Defender for Endpoint** application permission:
-
-- `Machine.Read.All`
-
-`scripts/postprovision.ps1` and `scripts/postprovision.sh` assign them after infrastructure provisioning.
+The identity also needs the Defender for Endpoint application permission `Machine.Read.All` when `defenderCheckInExtensionAttributeNumber` is greater than `0`. `scripts/postprovision.ps1` and `scripts/postprovision.sh` assign the required roles after infrastructure provisioning. `ThreatHunting.Read.All` is assigned only when `advancedHuntingEnabled=true`. `Machine.Read.All` is assigned when the Defender extension attribute is enabled and removed when that source is disabled.
 
 ## Configuration
 
@@ -227,15 +223,15 @@ The default deployment wires these settings into the published runbook:
 | `exclusionDeviceGroupObjectId` | empty | Optional existing Microsoft Entra security group object ID for devices excluded from disable/delete |
 | `exclusionDeviceGroupName` | empty | Optional display name override for the exclusion security group created by post-provision |
 | `intuneCheckInExtensionAttributeNumber` | `14` | Device extensionAttribute slot for Intune check-in state; set `0` to disable |
-| `defenderCheckInExtensionAttributeNumber` | `15` | Device extensionAttribute slot for Defender check-in state; set `0` to disable |
+| `defenderCheckInExtensionAttributeNumber` | `15` | Device extensionAttribute slot for Defender check-in state from the Defender machines API; set `0` to disable that source |
 | `intuneDynamicGroupEnabled` | `true` | Create or update a dynamic device group for the Intune check-in attribute |
 | `intuneDynamicGroupName` | empty | Optional display name override for the Intune dynamic group |
 | `intuneDynamicGroupRule` | empty | Optional membership rule override for the Intune dynamic group |
 | `defenderDynamicGroupEnabled` | `true` | Create or update a dynamic device group for the Defender check-in attribute |
 | `defenderDynamicGroupName` | empty | Optional display name override for the Defender dynamic group |
 | `defenderDynamicGroupRule` | empty | Optional membership rule override for the Defender dynamic group |
-| `advancedHuntingEnabled` | `true` | Enable Microsoft Graph security advanced hunting as an extra heartbeat signal |
-| `advancedHuntingLookbackDays` | `30` | Timespan for Graph advanced hunting heartbeat queries |
+| `advancedHuntingEnabled` | `true` | Enable optional Microsoft Graph security advanced hunting for supplemental Defender state and heartbeat signals |
+| `advancedHuntingLookbackDays` | `30` | Timespan for optional Graph advanced hunting queries; maximum 30 days |
 | `secretNamePrefix` | `device-cleanup` | Key Vault secret name prefix |
 | `retentionInDays` | `90` | Key Vault soft-delete retention |
 
@@ -281,7 +277,7 @@ The default deployment wires these settings into the published runbook:
    .\scripts\preflight.ps1
    ```
 
-   This validates the managed identity app roles, Key Vault RBAC, runbook publish state, exclusion/dynamic groups, the Logic App workflow, and a safe Automation dry run with `DisableEnabled=false` and `DeleteEnabled=false`.
+   This validates the managed identity app roles, Key Vault RBAC and purge-protection configuration, runbook publish state, exclusion/dynamic groups and membership rules, the resource-group delete lock, the Logic App workflow, and a safe Automation dry run with `DisableEnabled=false` and `DeleteEnabled=false`.
 
 ## Logic App notifications and reporting
 
@@ -296,6 +292,7 @@ This keeps the Azure deployment fully automated without requiring pre-authorized
 The summary payload includes:
 
 - environment, subscription, resource group, automation account, and runbook names
+- `cleanupRunId` so notifications and archived device records can be correlated to the same run
 - run status and severity
 - candidate counts, dry-run counts, executed disable/delete counts, and excluded-device counts
 - per-device execution details for disable/archive-delete actions
@@ -322,7 +319,7 @@ Add excluded devices directly to that group. The runbook reads the group's direc
 The default deployment writes derived check-in state to:
 
 - `extensionAttribute14` for **Intune**
-- `extensionAttribute15` for **Defender for Endpoint**
+- `extensionAttribute15` for **Defender for Endpoint**, sourced from the Defender machines API with optional advanced hunting fallback
 
 You can change those slots through `infra\main.parameters.json` or by setting the matching azd environment values before the next `azd provision`. Set either value to `0` to disable that source.
 
@@ -334,13 +331,13 @@ The runbook now builds an **effective heartbeat** for each device from the newes
 
 - Entra `approximateLastSignInDateTime`
 - Intune `managedDevice.lastSyncDateTime`
-- Defender for Endpoint `machine.lastSeen`
-- Microsoft Graph security `runHuntingQuery` results from advanced hunting tables such as:
+- Defender for Endpoint `machine.lastSeen` from the machines API
+- Optional Microsoft Graph security `runHuntingQuery` results from advanced hunting tables such as:
   - `DeviceInfo`
   - `DeviceLogonEvents`
   - `IdentityLogonEvents`
 
-If any of those sources shows a newer heartbeat than Entra, the newer signal wins for disable/delete decisions. This protects devices that are still active even when Entra-specific registration or certificate data is stale.
+The Defender machines API is the primary Defender source because it exposes each machine's actual `lastSeen` value according to the tenant's configured retention period, rather than the 30-day raw-data limit of advanced hunting. If any source shows a newer heartbeat than Entra, the newer signal wins for disable/delete decisions. Advanced hunting is supplemental and can serve as a fallback if the machines API is unavailable. If both Defender sources are unavailable, the run preserves existing Defender attributes and skips disable/delete actions rather than treating missing telemetry as proof of inactivity.
 
 Why:
 
@@ -358,7 +355,7 @@ Directory extensions are still a good second-step option when you need:
 For Intune and Defender check-in, the source attributes to look up are typically:
 
 - **Intune:** `managedDevice.lastSyncDateTime`
-- **Defender for Endpoint:** `machine.lastSeen`
+- **Defender for Endpoint:** machines API `lastSeen`, with optional advanced hunting `DeviceInfo.LastSeenTime` and supporting event evidence from `DeviceLogonEvents` and `IdentityLogonEvents`
 
 ### Attribute value format
 
@@ -414,10 +411,42 @@ Examples:
 ```powershell
 .\scripts\Get-ArchivedDevice.ps1 -DisplayName "PL-CL02"
 .\scripts\Get-ArchivedDevice.ps1 -DeviceId "<device-guid>"
+.\\scripts\\Get-ArchivedDevice.ps1 -SerialNumber "<serial-number>"
+.\\scripts\\Get-ArchivedDevice.ps1 -IntuneManagedDeviceId "<managed-device-guid>"
+.\\scripts\\Get-ArchivedDevice.ps1 -DefenderMachineId "<defender-machine-id>"
 .\scripts\Get-ArchivedDevice.ps1 -EntraObjectId "<object-guid>" -ShowRecoveryMaterial
 ```
 
 The script defaults to summary output so recovery data is not printed accidentally. Add `-ShowRecoveryMaterial` only when you need the LAPS password or BitLocker keys on screen.
+
+Each archived secret now carries searchable metadata in both the JSON payload and Key Vault tags, including:
+
+- Entra object ID and device ID
+- Intune managed device ID and serial number when available
+- Defender for Endpoint machine ID when available
+- per-source last-seen timestamps
+- `cleanupRunId` plus the effective heartbeat source and timestamp that drove the delete decision
+
+## Recovery drill and SOP
+
+Before you rely on this in production, run at least one full recovery drill with a non-critical device:
+
+1. Trigger an archive-producing delete path in a safe test scope.
+2. Locate the archived record with `scripts\Get-ArchivedDevice.ps1` by display name, device ID, serial number, or one of the source-specific IDs.
+3. Confirm the summary view includes the identifiers and heartbeat evidence you expect before revealing recovery material.
+4. Re-run with `-ShowRecoveryMaterial` only for the one record you intend to inspect.
+5. Validate that the LAPS and BitLocker material is sufficient for your real operator process, then document where your team stores or records the recovery outcome.
+
+This solution preserves **recovery material and cleanup evidence**, not a full device restore workflow. Re-enrollment, domain rejoin, and any downstream Intune or Defender cleanup still follow your existing operational process.
+
+## Access model and RBAC guidance
+
+Use separate access paths for automation and human recovery:
+
+- The Automation Account managed identity should keep only the write access it needs for cleanup and archive creation.
+- Human operators who may retrieve LAPS or BitLocker material should be granted the minimum Key Vault data-plane role required for read access, and only on the archive vault.
+- Treat archive read access as a privileged recovery action and review it regularly.
+- If high-value devices or exclusion groups need tighter control, place them behind a restricted management administrative unit (RMAU) and scope recovery permissions accordingly.
 
 ## Operational notes
 
@@ -425,11 +454,14 @@ The script defaults to summary output so recovery data is not printed accidental
 - The preflight validator is `scripts/preflight.ps1`.
 - The archive retrieval helper is `scripts/Get-ArchivedDevice.ps1`.
 - The Automation Account uses a system-assigned managed identity and writes archives to Key Vault through RBAC.
+- Defender state uses the Defender for Endpoint machines API as the primary source. Optional Microsoft Graph advanced hunting adds event evidence and can provide a fallback heartbeat.
 - The same runbook can update check-in extension attributes across `AzureAd`, `ServerAd`, `Workplace`, and null-trust device types. This was tested in the tenant used for validation.
 - Devices in a restricted management administrative unit can reject extensionAttribute updates unless the Automation identity is scoped into that administrative unit. The runbook logs and skips those devices instead of failing the whole run.
 - For high-value devices and the groups that protect them, consider a **restricted management administrative unit (RMAU)** so accidental cleanup or group changes require the correct scoped administrative role.
-- Graph advanced hunting is enabled by default. If the `ThreatHunting.Read.All` grant is still propagating, or if a tenant does not have the required licensing or data sources, the runbook logs a warning and continues with the Entra, Intune, and Defender for Endpoint signals that are already available. Set `advancedHuntingEnabled=false` if you want to suppress that warning and skip hunting entirely.
+- The Defender machines API uses the tenant's configured machine-retention period. Advanced hunting is optional, limited to a maximum 30-day lookback, and provides supplemental event evidence or a fallback when the machines API is unavailable. If both Defender sources are unavailable, the run skips disable/delete actions for that run.
+- If a tenant does not have the required advanced hunting licensing or data sources, set `advancedHuntingEnabled=false`; the Defender machines API can still provide the primary heartbeat and extension-attribute data.
 - The resource group gets a `CanNotDelete` lock by default. Remove it before running `azd down`.
 - Missing LAPS or BitLocker data does **not** block deletion.
 - Archive retrieval or Key Vault write failures **do** block deletion.
+- Archived device records now include correlation metadata (`cleanupRunId`, heartbeat source, and per-system identifiers) to make notifications and recovery lookups line up.
 - The current implementation deletes only the Entra device. Intune and Defender for Endpoint cleanup can be added around the same archive record later.

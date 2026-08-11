@@ -120,12 +120,12 @@ param defenderDynamicGroupName string = ''
 @description('Optional membership rule override for the Defender for Endpoint dynamic device group. Leave empty to use the configured Defender extensionAttribute slot and stale-state rule.')
 param defenderDynamicGroupRule string = ''
 
-@description('Enable Microsoft Graph advanced hunting queries as an additional heartbeat signal source.')
+@description('Enable optional Microsoft Graph advanced hunting queries as supplemental heartbeat evidence and fallback when the Defender machines API is unavailable.')
 param advancedHuntingEnabled bool = true
 
 @minValue(1)
-@maxValue(90)
-@description('Lookback window in days for Microsoft Graph advanced hunting heartbeat queries.')
+@maxValue(30)
+@description('Lookback window in days for Microsoft Graph advanced hunting heartbeat queries. Microsoft Defender advanced hunting data is limited to a 30-day window.')
 param advancedHuntingLookbackDays int = 30
 
 @description('Prefix for archived device secrets in Key Vault.')
@@ -201,6 +201,7 @@ output CLEANUP_SCHEDULE_INTERVAL string = string(cleanupScheduleInterval)
 output CLEANUP_SCHEDULE_START_TIME string = cleanupScheduleStartTime
 output CLEANUP_SCHEDULE_TIME_ZONE string = cleanupScheduleTimeZone
 output DEVICE_ARCHIVE_KEY_VAULT_NAME string = resources.outputs.DEVICE_ARCHIVE_KEY_VAULT_NAME
+output DEVICE_ARCHIVE_RETENTION_IN_DAYS string = string(retentionInDays)
 output DEVICE_DELETE_AFTER_DAYS string = string(deviceDeleteAfterDays)
 output DEVICE_DELETE_ENABLED string = deleteEnabled ? 'true' : 'false'
 output DEVICE_DISABLE_AFTER_DAYS string = string(deviceDisableAfterDays)
