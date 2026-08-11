@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "13923518895405707553"
+      "templateHash": "14422833254970531854"
     }
   },
   "parameters": {
@@ -260,16 +260,16 @@
       "type": "bool",
       "defaultValue": true,
       "metadata": {
-        "description": "Enable Microsoft Graph advanced hunting queries as an additional heartbeat signal source."
+        "description": "Enable optional Microsoft Graph advanced hunting queries as supplemental heartbeat evidence and fallback when the Defender machines API is unavailable."
       }
     },
     "advancedHuntingLookbackDays": {
       "type": "int",
       "defaultValue": 30,
       "minValue": 1,
-      "maxValue": 90,
+      "maxValue": 30,
       "metadata": {
-        "description": "Lookback window in days for Microsoft Graph advanced hunting heartbeat queries."
+        "description": "Lookback window in days for Microsoft Graph advanced hunting heartbeat queries. Microsoft Defender advanced hunting data is limited to a 30-day window."
       }
     },
     "secretNamePrefix": {
@@ -871,6 +871,10 @@
     "DEVICE_ARCHIVE_KEY_VAULT_NAME": {
       "type": "string",
       "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'device-cleanup-resources'), '2025-04-01').outputs.DEVICE_ARCHIVE_KEY_VAULT_NAME.value]"
+    },
+    "DEVICE_ARCHIVE_RETENTION_IN_DAYS": {
+      "type": "string",
+      "value": "[string(parameters('retentionInDays'))]"
     },
     "DEVICE_DELETE_AFTER_DAYS": {
       "type": "string",

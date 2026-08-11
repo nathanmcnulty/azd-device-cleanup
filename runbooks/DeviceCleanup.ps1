@@ -28,6 +28,7 @@ $ErrorActionPreference = 'Stop'
 
 $script:GraphResourceUrl = 'https://graph.microsoft.com/'
 $script:DefenderResourceUrl = 'https://api.securitycenter.microsoft.com'
+$script:DefenderApiUrl = 'https://api.security.microsoft.com'
 $script:KeyVaultResourceUrl = 'https://vault.azure.net'
 $script:TokenCache = @{}
 
@@ -326,7 +327,7 @@ function Get-DefenderMachines {
     $pageSize = 10000
 
     while ($true) {
-        $uri = "$($script:DefenderResourceUrl)/api/machines?`$top=$pageSize&`$skip=$skip"
+        $uri = "$($script:DefenderApiUrl)/api/machines?`$top=$pageSize&`$skip=$skip"
         try {
             $response = Invoke-JsonRestMethod -Method 'GET' -Uri $uri -AccessToken $token
         }
@@ -340,7 +341,6 @@ function Get-DefenderMachines {
         }
 
         $batch = @($response.value)
-
         if ($batch.Count -eq 0) {
             break
         }
@@ -354,6 +354,25 @@ function Get-DefenderMachines {
     }
 
     return $items
+}
+
+function New-DefenderMachineIndex {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]] $Machines
+    )
+
+    $index = @{}
+    foreach ($machine in $Machines) {
+        $key = Get-IndexedDeviceId -DeviceId $machine.aadDeviceId
+        if ($null -eq $key) {
+            continue
+        }
+
+        $index[$key] = Select-NewerCheckInRecord -Current $index[$key] -Candidate $machine -TimestampPropertyName 'lastSeen'
+    }
+
+    return $index
 }
 
 function Invoke-GraphHuntingQuery {
@@ -389,23 +408,24 @@ union isfuzzy=true
 (
     DeviceInfo
     | where isnotempty(AadDeviceId)
-    | summarize arg_max(Timestamp, *) by AadDeviceId
-    | extend SourceTable = "DeviceInfo", HeartbeatTimestamp = Timestamp
-    | project AadDeviceId, SourceTable, HeartbeatTimestamp, DeviceName, Record = pack_all()
+    | extend DeviceHeartbeatTimestamp = Timestamp
+    | summarize arg_max(DeviceHeartbeatTimestamp, *) by AadDeviceId
+    | extend SourceTable = "DeviceInfo", HeartbeatTimestamp = DeviceHeartbeatTimestamp, DefenderMachineId = tostring(DeviceId), DefenderSensorHealthState = tostring(SensorHealthState), DefenderOnboardingStatus = tostring(OnboardingStatus)
+    | project AadDeviceId, SourceTable, HeartbeatTimestamp, DeviceName, DefenderMachineId, DefenderSensorHealthState, DefenderOnboardingStatus, Record = pack_all()
 ),
 (
     DeviceLogonEvents
     | where isnotempty(AadDeviceId)
     | summarize arg_max(Timestamp, *) by AadDeviceId
     | extend SourceTable = "DeviceLogonEvents", HeartbeatTimestamp = Timestamp
-    | project AadDeviceId, SourceTable, HeartbeatTimestamp, DeviceName, Record = pack_all()
+    | project AadDeviceId, SourceTable, HeartbeatTimestamp, DeviceName, DefenderMachineId = "", DefenderSensorHealthState = "", DefenderOnboardingStatus = "", Record = pack_all()
 ),
 (
     IdentityLogonEvents
     | where isnotempty(AadDeviceId)
     | summarize arg_max(Timestamp, *) by AadDeviceId
     | extend SourceTable = "IdentityLogonEvents", HeartbeatTimestamp = Timestamp
-    | project AadDeviceId, SourceTable, HeartbeatTimestamp, DeviceName, Record = pack_all()
+    | project AadDeviceId, SourceTable, HeartbeatTimestamp, DeviceName, DefenderMachineId = "", DefenderSensorHealthState = "", DefenderOnboardingStatus = "", Record = pack_all()
 )
 | where isnotempty(AadDeviceId)
 | order by HeartbeatTimestamp desc
@@ -415,7 +435,7 @@ union isfuzzy=true
 }
 
 function Get-IntuneManagedDevices {
-    $select = [Uri]::EscapeDataString('id,deviceName,azureADDeviceId,lastSyncDateTime')
+    $select = [Uri]::EscapeDataString('id,deviceName,azureADDeviceId,lastSyncDateTime,serialNumber')
     $uri = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?`$select=$select"
 
     return @(Get-GraphCollection -Uri $uri)
@@ -537,25 +557,6 @@ function New-IntuneManagedDeviceIndex {
     return $index
 }
 
-function New-DefenderMachineIndex {
-    param(
-        [Parameter(Mandatory = $true)]
-        [object[]] $Machines
-    )
-
-    $index = @{}
-    foreach ($machine in $Machines) {
-        $key = Get-IndexedDeviceId -DeviceId $machine.aadDeviceId
-        if ($null -eq $key) {
-            continue
-        }
-
-        $index[$key] = Select-NewerCheckInRecord -Current $index[$key] -Candidate $machine -TimestampPropertyName 'lastSeen'
-    }
-
-    return $index
-}
-
 function New-AdvancedHuntingHeartbeatIndex {
     param(
         [Parameter(Mandatory = $true)]
@@ -573,6 +574,9 @@ function New-AdvancedHuntingHeartbeatIndex {
             SourceTable = $row.SourceTable
             DeviceName = $row.DeviceName
             HeartbeatTimestamp = Get-NormalizedTimestamp -Value ([string] $row.HeartbeatTimestamp)
+            DefenderMachineId = if ([string]::IsNullOrWhiteSpace([string] $row.DefenderMachineId)) { $null } else { [string] $row.DefenderMachineId }
+            DefenderSensorHealthState = if ([string]::IsNullOrWhiteSpace([string] $row.DefenderSensorHealthState)) { $null } else { [string] $row.DefenderSensorHealthState }
+            DefenderOnboardingStatus = if ([string]::IsNullOrWhiteSpace([string] $row.DefenderOnboardingStatus)) { $null } else { [string] $row.DefenderOnboardingStatus }
             Record = $row.Record
         }
 
@@ -584,6 +588,30 @@ function New-AdvancedHuntingHeartbeatIndex {
     }
 
     return $index
+}
+
+function Get-LatestAdvancedHuntingRecord {
+    param(
+        [AllowNull()]
+        [object[]] $Records,
+        [AllowEmptyString()]
+        [string] $SourceTable = ''
+    )
+
+    $latestRecord = $null
+    foreach ($record in @($Records)) {
+        if ($null -eq $record -or $null -eq $record.HeartbeatTimestamp) {
+            continue
+        }
+
+        if ((-not [string]::IsNullOrWhiteSpace($SourceTable)) -and ($record.SourceTable -ne $SourceTable)) {
+            continue
+        }
+
+        $latestRecord = Select-NewerCheckInRecord -Current $latestRecord -Candidate $record -TimestampPropertyName 'HeartbeatTimestamp'
+    }
+
+    return $latestRecord
 }
 
 function Get-CheckInState {
@@ -761,6 +789,7 @@ function Get-IntuneCheckInData {
         LastCheckIn = $timestamp
         ManagedDeviceId = $managedDevice.id
         DeviceName = $managedDevice.deviceName
+        SerialNumber = $managedDevice.serialNumber
         AttributeValue = Format-CheckInAttributeValue -State $state -Timestamp $timestamp
     }
 }
@@ -769,8 +798,8 @@ function Get-DefenderCheckInData {
     param(
         [Parameter(Mandatory = $true)]
         [object] $Device,
-        [Parameter(Mandatory = $true)]
-        [hashtable] $MachineIndex,
+        [AllowNull()]
+        [object[]] $AdvancedHuntingRecords,
         [Parameter(Mandatory = $true)]
         [int] $StaleAfterDays,
         [Parameter(Mandatory = $true)]
@@ -784,8 +813,64 @@ function Get-DefenderCheckInData {
             State = 'Unknown'
             LastCheckIn = $null
             MachineId = $null
-            ComputerDnsName = $null
-            HealthStatus = $null
+            DeviceName = $null
+            SensorHealthState = $null
+            OnboardingStatus = $null
+            AttributeValue = Format-CheckInAttributeValue -State 'Unknown' -Timestamp $null
+        }
+    }
+
+    $latestRecord = Get-LatestAdvancedHuntingRecord -Records $AdvancedHuntingRecords
+    if ($null -eq $latestRecord) {
+        return [pscustomobject]@{
+            SourceFound = $false
+            State = 'NotOnboarded'
+            LastCheckIn = $null
+            MachineId = $null
+            DeviceName = $null
+            SensorHealthState = $null
+            OnboardingStatus = $null
+            AttributeValue = Format-CheckInAttributeValue -State 'NotOnboarded' -Timestamp $null
+        }
+    }
+
+    $deviceInfoRecord = Get-LatestAdvancedHuntingRecord -Records $AdvancedHuntingRecords -SourceTable 'DeviceInfo'
+    $timestamp = $latestRecord.HeartbeatTimestamp
+    $state = Get-CheckInState -Timestamp $timestamp -StaleAfterDays $StaleAfterDays -ReferenceTime $ReferenceTime
+
+    return [pscustomobject]@{
+        SourceFound = $true
+        State = $state
+        LastCheckIn = $timestamp
+        MachineId = if ($null -eq $deviceInfoRecord) { $null } else { $deviceInfoRecord.DefenderMachineId }
+        DeviceName = $latestRecord.DeviceName
+        SensorHealthState = if ($null -eq $deviceInfoRecord) { $null } else { $deviceInfoRecord.DefenderSensorHealthState }
+        OnboardingStatus = if ($null -eq $deviceInfoRecord) { $null } else { $deviceInfoRecord.DefenderOnboardingStatus }
+        AttributeValue = Format-CheckInAttributeValue -State $state -Timestamp $timestamp
+    }
+}
+
+function Get-DefenderMachineCheckInData {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $Device,
+        [AllowNull()]
+        [hashtable] $MachineIndex,
+        [Parameter(Mandatory = $true)]
+        [int] $StaleAfterDays,
+        [Parameter(Mandatory = $true)]
+        [datetime] $ReferenceTime
+    )
+
+    $deviceKey = Get-IndexedDeviceId -DeviceId $Device.deviceId
+    if (($null -eq $deviceKey) -or ($null -eq $MachineIndex)) {
+        return [pscustomobject]@{
+            SourceFound = $false
+            State = 'Unknown'
+            LastCheckIn = $null
+            MachineId = $null
+            DeviceName = $null
+            SensorHealthState = $null
             OnboardingStatus = $null
             AttributeValue = Format-CheckInAttributeValue -State 'Unknown' -Timestamp $null
         }
@@ -798,8 +883,8 @@ function Get-DefenderCheckInData {
             State = 'NotOnboarded'
             LastCheckIn = $null
             MachineId = $null
-            ComputerDnsName = $null
-            HealthStatus = $null
+            DeviceName = $null
+            SensorHealthState = $null
             OnboardingStatus = $null
             AttributeValue = Format-CheckInAttributeValue -State 'NotOnboarded' -Timestamp $null
         }
@@ -813,8 +898,8 @@ function Get-DefenderCheckInData {
         State = $state
         LastCheckIn = $timestamp
         MachineId = $machine.id
-        ComputerDnsName = $machine.computerDnsName
-        HealthStatus = $machine.healthStatus
+        DeviceName = $machine.computerDnsName
+        SensorHealthState = $machine.healthStatus
         OnboardingStatus = $machine.onboardingStatus
         AttributeValue = Format-CheckInAttributeValue -State $state -Timestamp $timestamp
     }
@@ -844,10 +929,6 @@ function Get-DeviceCheckInData {
         $intuneData = Get-IntuneCheckInData -Device $Device -ManagedDeviceIndex $ManagedDeviceIndex -StaleAfterDays $Settings.DisableAfterDays -ReferenceTime $ReferenceTime
     }
 
-    if ($Settings.DefenderCheckInAttributeNumber -gt 0) {
-        $defenderData = Get-DefenderCheckInData -Device $Device -MachineIndex $MachineIndex -StaleAfterDays $Settings.DisableAfterDays -ReferenceTime $ReferenceTime
-    }
-
     if ($Settings.AdvancedHuntingEnabled) {
         $deviceKey = Get-IndexedDeviceId -DeviceId $Device.deviceId
         if (($null -ne $deviceKey) -and ($null -ne $AdvancedHuntingIndex) -and $AdvancedHuntingIndex.ContainsKey($deviceKey)) {
@@ -855,6 +936,14 @@ function Get-DeviceCheckInData {
                 $advancedHuntingRecords += $record
             }
         }
+    }
+
+    $defenderApiData = $null
+    $advancedHuntingDefenderData = $null
+    if ($Settings.DefenderCheckInAttributeNumber -gt 0) {
+        $defenderApiData = Get-DefenderMachineCheckInData -Device $Device -MachineIndex $MachineIndex -StaleAfterDays $Settings.DisableAfterDays -ReferenceTime $ReferenceTime
+        $advancedHuntingDefenderData = Get-DefenderCheckInData -Device $Device -AdvancedHuntingRecords $advancedHuntingRecords -StaleAfterDays $Settings.DisableAfterDays -ReferenceTime $ReferenceTime
+        $defenderData = if ($defenderApiData.SourceFound) { $defenderApiData } elseif ($advancedHuntingDefenderData.SourceFound) { $advancedHuntingDefenderData } else { $defenderApiData }
     }
 
     $effectiveHeartbeat = Get-EffectiveHeartbeat `
@@ -1036,6 +1125,12 @@ function Build-ArchivePayload {
     param(
         [Parameter(Mandatory = $true)]
         [object] $Device,
+        [Parameter(Mandatory = $true)]
+        [string] $ArchivedAt,
+        [Parameter(Mandatory = $true)]
+        [string] $CleanupRunId,
+        [AllowNull()]
+        [object] $Candidate,
         [AllowNull()]
         [object] $CheckInData,
         [AllowNull()]
@@ -1045,8 +1140,23 @@ function Build-ArchivePayload {
     )
 
     return [ordered]@{
-        schemaVersion = '1.0'
-        archivedAt = (Get-Date).ToUniversalTime().ToString('o')
+        schemaVersion = '1.1'
+        archivedAt = $ArchivedAt
+        cleanupContext = if ($null -eq $Candidate) {
+            [ordered]@{
+                cleanupRunId = $CleanupRunId
+                action = 'Delete'
+            }
+        }
+        else {
+            [ordered]@{
+                cleanupRunId = $CleanupRunId
+                action = $Candidate.Action
+                inactiveDays = $Candidate.InactiveDays
+                effectiveHeartbeatSource = $Candidate.HeartbeatSource
+                effectiveHeartbeatTimestamp = $Candidate.HeartbeatTimestamp
+            }
+        }
         sources = [ordered]@{
             entra = $true
             intune = $null -ne $CheckInData -and $null -ne $CheckInData.Intune -and $CheckInData.Intune.SourceFound
@@ -1061,6 +1171,7 @@ function Build-ArchivePayload {
             operatingSystemVersion = $Device.operatingSystemVersion
             trustType = $Device.trustType
             approximateLastSignInDateTime = $Device.approximateLastSignInDateTime
+            serialNumber = if ($null -eq $CheckInData -or $null -eq $CheckInData.Intune) { $null } else { $CheckInData.Intune.SerialNumber }
         }
         intune = if ($null -eq $CheckInData -or $null -eq $CheckInData.Intune) {
             $null
@@ -1071,6 +1182,7 @@ function Build-ArchivePayload {
                 lastSyncDateTime = $CheckInData.Intune.LastCheckIn
                 managedDeviceId = $CheckInData.Intune.ManagedDeviceId
                 deviceName = $CheckInData.Intune.DeviceName
+                serialNumber = $CheckInData.Intune.SerialNumber
                 extensionAttributeValue = $CheckInData.Intune.AttributeValue
             }
         }
@@ -1082,8 +1194,8 @@ function Build-ArchivePayload {
                 state = $CheckInData.DefenderForEndpoint.State
                 lastSeen = $CheckInData.DefenderForEndpoint.LastCheckIn
                 machineId = $CheckInData.DefenderForEndpoint.MachineId
-                computerDnsName = $CheckInData.DefenderForEndpoint.ComputerDnsName
-                healthStatus = $CheckInData.DefenderForEndpoint.HealthStatus
+                deviceName = $CheckInData.DefenderForEndpoint.DeviceName
+                sensorHealthState = $CheckInData.DefenderForEndpoint.SensorHealthState
                 onboardingStatus = $CheckInData.DefenderForEndpoint.OnboardingStatus
                 extensionAttributeValue = $CheckInData.DefenderForEndpoint.AttributeValue
             }
@@ -1222,9 +1334,10 @@ function Get-DeviceCleanupSettings {
         throw "IntuneCheckInAttributeNumber and DefenderCheckInAttributeNumber must be different when both are enabled. Current value: $resolvedIntuneAttributeNumber."
     }
 
+    $resolvedAdvancedHuntingEnabled = Get-BooleanInput -Name 'AdvancedHuntingEnabled' -Value $AdvancedHuntingEnabled
     $resolvedAdvancedHuntingLookbackDays = Get-IntegerInput -Name 'AdvancedHuntingLookbackDays' -Value $AdvancedHuntingLookbackDays
-    if (($resolvedAdvancedHuntingLookbackDays -lt 1) -or ($resolvedAdvancedHuntingLookbackDays -gt 90)) {
-        throw "AdvancedHuntingLookbackDays must be between 1 and 90. Current value: $resolvedAdvancedHuntingLookbackDays."
+    if (($resolvedAdvancedHuntingLookbackDays -lt 1) -or ($resolvedAdvancedHuntingLookbackDays -gt 30)) {
+        throw "AdvancedHuntingLookbackDays must be between 1 and 30 because Microsoft Defender advanced hunting data is limited to a 30-day window. Current value: $resolvedAdvancedHuntingLookbackDays."
     }
 
     $resolvedNotificationsEnabled = $false
@@ -1271,7 +1384,7 @@ function Get-DeviceCleanupSettings {
         IntuneCheckInAttributeName = if ($resolvedIntuneAttributeNumber -gt 0) { Get-ExtensionAttributeName -Number $resolvedIntuneAttributeNumber } else { $null }
         DefenderCheckInAttributeNumber = $resolvedDefenderAttributeNumber
         DefenderCheckInAttributeName = if ($resolvedDefenderAttributeNumber -gt 0) { Get-ExtensionAttributeName -Number $resolvedDefenderAttributeNumber } else { $null }
-        AdvancedHuntingEnabled = Get-BooleanInput -Name 'AdvancedHuntingEnabled' -Value $AdvancedHuntingEnabled
+        AdvancedHuntingEnabled = $resolvedAdvancedHuntingEnabled
         AdvancedHuntingLookbackDays = $resolvedAdvancedHuntingLookbackDays
         NotificationsEnabled = $resolvedNotificationsEnabled
         NotificationCallbackUrl = $resolvedNotificationCallbackUrl
@@ -1303,6 +1416,7 @@ function New-DeviceCleanupActionRecord {
         displayName = $displayName
         entraObjectId = $Device.id
         deviceId = $Device.deviceId
+        cleanupRunId = $null
         action = $Candidate.Action
         mode = $Mode
         inactiveDays = $Candidate.InactiveDays
@@ -1311,6 +1425,7 @@ function New-DeviceCleanupActionRecord {
     }
 
     if ($null -ne $ArchiveResult) {
+        $record.cleanupRunId = $ArchiveResult.CleanupRunId
         $record.secretName = $ArchiveResult.SecretName
         $record.lapsCredentialCount = $ArchiveResult.LapsCredentialCount
         $record.bitLockerKeyCount = $ArchiveResult.BitLockerKeyCount
@@ -1433,7 +1548,11 @@ function Sync-DeviceCheckInAttributes {
         [AllowNull()]
         [hashtable] $ManagedDeviceIndex,
         [AllowNull()]
-        [hashtable] $MachineIndex
+        [hashtable] $MachineIndex,
+        [bool] $DefenderApiAvailable = $true,
+        [bool] $AdvancedHuntingAvailable = $true,
+        [AllowNull()]
+        [hashtable] $AdvancedHuntingIndex
     )
 
     if (($Settings.IntuneCheckInAttributeNumber -le 0) -and ($Settings.DefenderCheckInAttributeNumber -le 0)) {
@@ -1449,7 +1568,7 @@ function Sync-DeviceCheckInAttributes {
         $displayName = if ([string]::IsNullOrWhiteSpace($device.displayName)) { '<unnamed-device>' } else { $device.displayName }
         $checkInData = $null
         try {
-            $checkInData = Get-DeviceCheckInData -Device $device -Settings $Settings -ReferenceTime $ReferenceTime -ManagedDeviceIndex $ManagedDeviceIndex -MachineIndex $MachineIndex
+            $checkInData = Get-DeviceCheckInData -Device $device -Settings $Settings -ReferenceTime $ReferenceTime -ManagedDeviceIndex $ManagedDeviceIndex -MachineIndex $MachineIndex -AdvancedHuntingIndex $AdvancedHuntingIndex
         }
         catch {
             $message = "Failed to evaluate device '$displayName' ($($device.id)) during extension-attribute sync. $($_.Exception.Message)"
@@ -1473,7 +1592,8 @@ function Sync-DeviceCheckInAttributes {
             }
         }
 
-        if ($Settings.DefenderCheckInAttributeNumber -gt 0) {
+        $defenderHeartbeatAvailable = ($Settings.DefenderCheckInAttributeNumber -le 0) -or $DefenderApiAvailable -or (($Settings.AdvancedHuntingEnabled) -and $AdvancedHuntingAvailable)
+        if (($Settings.DefenderCheckInAttributeNumber -gt 0) -and $defenderHeartbeatAvailable) {
             $existingDefenderValue = $null
             if ($null -ne $device.extensionAttributes) {
                 $existingDefenderValue = $device.extensionAttributes.($Settings.DefenderCheckInAttributeName)
@@ -1526,6 +1646,10 @@ function Save-DeviceArchive {
         [object] $Device,
         [Parameter(Mandatory = $true)]
         [object] $Settings,
+        [Parameter(Mandatory = $true)]
+        [string] $CleanupRunId,
+        [AllowNull()]
+        [object] $Candidate,
         [AllowNull()]
         [object] $CheckInData
     )
@@ -1533,9 +1657,9 @@ function Save-DeviceArchive {
     $secretDisplayName = if ([string]::IsNullOrWhiteSpace($Device.displayName)) { 'unnamed-device' } else { $Device.displayName }
     $lapsArchive = Get-LapsArchive -EntraObjectId $Device.id
     $bitLockerArchive = @(Get-BitLockerArchive -DeviceId $Device.deviceId)
-    $payload = Build-ArchivePayload -Device $Device -CheckInData $CheckInData -LapsArchive $lapsArchive -BitLockerArchive $bitLockerArchive
-    $secretName = New-ArchiveSecretName -Prefix $Settings.SecretPrefix -DisplayName $secretDisplayName -EntraObjectId $Device.id
     $archivedAt = (Get-Date).ToUniversalTime().ToString('o')
+    $payload = Build-ArchivePayload -Device $Device -ArchivedAt $archivedAt -CleanupRunId $CleanupRunId -Candidate $Candidate -CheckInData $CheckInData -LapsArchive $lapsArchive -BitLockerArchive $bitLockerArchive
+    $secretName = New-ArchiveSecretName -Prefix $Settings.SecretPrefix -DisplayName $secretDisplayName -EntraObjectId $Device.id
     $tags = @{}
 
     foreach ($entry in @(
@@ -1543,7 +1667,17 @@ function Save-DeviceArchive {
             @{ Key = 'deviceId'; Value = $Device.deviceId },
             @{ Key = 'entraObjectId'; Value = $Device.id },
             @{ Key = 'archivedAt'; Value = $archivedAt },
-            @{ Key = 'cleanupSource'; Value = 'entra' }
+            @{ Key = 'cleanupSource'; Value = 'entra' },
+            @{ Key = 'cleanupAction'; Value = if ($null -eq $Candidate) { 'Delete' } else { $Candidate.Action } },
+            @{ Key = 'cleanupRunId'; Value = $CleanupRunId },
+            @{ Key = 'effectiveHeartbeatSource'; Value = if ($null -eq $Candidate) { $null } else { $Candidate.HeartbeatSource } },
+            @{ Key = 'effectiveHeartbeatTimestamp'; Value = if ($null -eq $Candidate) { $null } else { $Candidate.HeartbeatTimestamp } },
+            @{ Key = 'serialNumber'; Value = $payload.device.serialNumber },
+            @{ Key = 'intuneManagedDeviceId'; Value = if ($null -eq $payload.intune) { $null } else { $payload.intune.managedDeviceId } },
+            @{ Key = 'defenderMachineId'; Value = if ($null -eq $payload.defenderForEndpoint) { $null } else { $payload.defenderForEndpoint.machineId } },
+            @{ Key = 'lastSeenEntra'; Value = if ($null -eq $payload.heartbeats) { $null } else { $payload.heartbeats.entra.timestamp } },
+            @{ Key = 'lastSeenIntune'; Value = if ($null -eq $payload.heartbeats -or $null -eq $payload.heartbeats.intune) { $null } else { $payload.heartbeats.intune.timestamp } },
+            @{ Key = 'lastSeenDefender'; Value = if ($null -eq $payload.heartbeats -or $null -eq $payload.heartbeats.defenderForEndpoint) { $null } else { $payload.heartbeats.defenderForEndpoint.timestamp } }
         )) {
         $tagValue = Limit-TagValue -Value $entry.Value
         if ($null -ne $tagValue) {
@@ -1554,6 +1688,7 @@ function Save-DeviceArchive {
     Set-KeyVaultArchiveSecret -VaultName $Settings.VaultName -SecretName $secretName -Payload $payload -Tags $tags
 
     return [pscustomobject]@{
+        CleanupRunId = $CleanupRunId
         SecretName = $secretName
         LapsCredentialCount = if ($null -eq $lapsArchive) { 0 } else { @($lapsArchive.credentials).Count }
         BitLockerKeyCount = $bitLockerArchive.Count
@@ -1563,11 +1698,14 @@ function Save-DeviceArchive {
 function Invoke-DeviceCleanupJob {
     $settings = Get-DeviceCleanupSettings
     $nowUtc = (Get-Date).ToUniversalTime()
+    $cleanupRunId = [guid]::NewGuid().ToString()
     $disableCutoffDate = $nowUtc.AddDays(-$settings.DisableAfterDays)
     $deleteCutoffDate = $nowUtc.AddDays(-$settings.DeleteAfterDays)
     $managedDeviceIndex = $null
     $machineIndex = $null
+    $defenderApiAvailable = -not ($settings.DefenderCheckInAttributeNumber -gt 0)
     $advancedHuntingIndex = $null
+    $advancedHuntingAvailable = -not $settings.AdvancedHuntingEnabled
     $excludedDeviceIdSet = $null
     $excludedLifecycleDeviceCount = 0
     $summary = [ordered]@{
@@ -1576,6 +1714,7 @@ function Invoke-DeviceCleanupJob {
         resourceGroupName = $settings.ResourceGroupName
         automationAccountName = $settings.AutomationAccountName
         runbookName = $settings.AutomationRunbookName
+        cleanupRunId = $cleanupRunId
         startedAtUtc = $nowUtc.ToString('o')
         finishedAtUtc = $null
         status = 'Running'
@@ -1592,6 +1731,16 @@ function Invoke-DeviceCleanupJob {
             defenderCheckInAttributeNumber = $settings.DefenderCheckInAttributeNumber
             advancedHuntingEnabled = $settings.AdvancedHuntingEnabled
             advancedHuntingLookbackDays = $settings.AdvancedHuntingLookbackDays
+        }
+        advancedHunting = [ordered]@{
+            enabled = $settings.AdvancedHuntingEnabled
+            available = if ($settings.AdvancedHuntingEnabled) { $false } else { $true }
+            failure = $null
+        }
+        defenderApi = [ordered]@{
+            enabled = $settings.DefenderCheckInAttributeNumber -gt 0
+            available = if ($settings.DefenderCheckInAttributeNumber -gt 0) { $false } else { $true }
+            failure = $null
         }
         counts = [ordered]@{
             totalDevices = 0
@@ -1615,7 +1764,7 @@ function Invoke-DeviceCleanupJob {
     }
 
     try {
-        Write-Output "Starting device cleanup run. DisableEnabled=$($settings.DisableEnabled); DeleteEnabled=$($settings.DeleteEnabled); ExclusionGroupId=$($settings.ExclusionGroupId); DisableAfterDays=$($settings.DisableAfterDays); DeleteAfterDays=$($settings.DeleteAfterDays); MaxDeleteCount=$($settings.MaxDeleteCount); IntuneAttribute=$($settings.IntuneCheckInAttributeNumber); DefenderAttribute=$($settings.DefenderCheckInAttributeNumber); AdvancedHuntingEnabled=$($settings.AdvancedHuntingEnabled); AdvancedHuntingLookbackDays=$($settings.AdvancedHuntingLookbackDays); DisableCutoff=$($disableCutoffDate.ToString('o')); DeleteCutoff=$($deleteCutoffDate.ToString('o'))"
+        Write-Output "Starting device cleanup run. CleanupRunId=$cleanupRunId; DisableEnabled=$($settings.DisableEnabled); DeleteEnabled=$($settings.DeleteEnabled); ExclusionGroupId=$($settings.ExclusionGroupId); DisableAfterDays=$($settings.DisableAfterDays); DeleteAfterDays=$($settings.DeleteAfterDays); MaxDeleteCount=$($settings.MaxDeleteCount); IntuneAttribute=$($settings.IntuneCheckInAttributeNumber); DefenderAttribute=$($settings.DefenderCheckInAttributeNumber); AdvancedHuntingEnabled=$($settings.AdvancedHuntingEnabled); AdvancedHuntingLookbackDays=$($settings.AdvancedHuntingLookbackDays); DisableCutoff=$($disableCutoffDate.ToString('o')); DeleteCutoff=$($deleteCutoffDate.ToString('o'))"
 
         $devices = @(Get-EntraDevices | Sort-Object -Property displayName, id)
         $summary.counts.totalDevices = $devices.Count
@@ -1641,26 +1790,52 @@ function Invoke-DeviceCleanupJob {
 
         if ($settings.DefenderCheckInAttributeNumber -gt 0) {
             Write-Output 'Loading Defender for Endpoint machine check-in data.'
-            $machineIndex = New-DefenderMachineIndex -Machines @(Get-DefenderMachines)
+            try {
+                $machineIndex = New-DefenderMachineIndex -Machines @(Get-DefenderMachines)
+                $defenderApiAvailable = $true
+                $summary.defenderApi.available = $true
+                Write-Output "Loaded $($machineIndex.Count) Defender machine record(s)."
+            }
+            catch {
+                $defenderApiAvailable = $false
+                $summary.defenderApi.available = $false
+                $summary.defenderApi.failure = $_.Exception.Message
+                Write-Warning "Defender machine data could not be loaded for this run. Advanced hunting may provide a fallback heartbeat if enabled. Error: $($_.Exception.Message)"
+            }
         }
 
         if ($settings.AdvancedHuntingEnabled) {
-            Write-Output 'Loading Microsoft Graph advanced hunting heartbeat data.'
+            Write-Output 'Loading Microsoft Graph advanced hunting data for Defender state and heartbeat signals.'
             try {
                 $advancedHuntingRows = @(Get-AdvancedHuntingHeartbeatRows -LookbackDays $settings.AdvancedHuntingLookbackDays)
                 $advancedHuntingIndex = New-AdvancedHuntingHeartbeatIndex -Rows $advancedHuntingRows
+                $advancedHuntingAvailable = $true
+                $summary.advancedHunting.available = $true
                 Write-Output "Loaded $($advancedHuntingRows.Count) advanced hunting heartbeat row(s)."
             }
             catch {
-                Write-Warning "Advanced hunting heartbeat data could not be loaded for this run. Continuing without advanced hunting signals. Error: $($_.Exception.Message)"
+                $advancedHuntingAvailable = $false
+                $summary.advancedHunting.available = $false
+                $summary.advancedHunting.failure = $_.Exception.Message
+                Write-Warning "Advanced hunting heartbeat data could not be loaded for this run. The Defender machines API remains the primary source when available. Error: $($_.Exception.Message)"
             }
         }
 
-        $syncResult = Sync-DeviceCheckInAttributes -Devices $devices -Settings $settings -ReferenceTime $nowUtc -ManagedDeviceIndex $managedDeviceIndex -MachineIndex $machineIndex
+        $syncResult = Sync-DeviceCheckInAttributes -Devices $devices -Settings $settings -ReferenceTime $nowUtc -ManagedDeviceIndex $managedDeviceIndex -MachineIndex $machineIndex -DefenderApiAvailable $defenderApiAvailable -AdvancedHuntingAvailable $advancedHuntingAvailable -AdvancedHuntingIndex $advancedHuntingIndex
         $summary.counts.intuneDefenderAttributeUpdates = $syncResult.UpdatedCount
         $summary.counts.restrictedManagementUnitSkipped = $syncResult.RestrictedManagementUnitSkippedCount
         if (($settings.IntuneCheckInAttributeNumber -gt 0) -or ($settings.DefenderCheckInAttributeNumber -gt 0)) {
             Write-Output "Updated extension attributes on $($syncResult.UpdatedCount) of $($syncResult.DeviceCount) device(s). RestrictedManagementUnitSkipped=$($syncResult.RestrictedManagementUnitSkippedCount)."
+        }
+
+        if (($settings.DefenderCheckInAttributeNumber -gt 0) -and (-not $defenderApiAvailable) -and ((-not $settings.AdvancedHuntingEnabled) -or (-not $advancedHuntingAvailable))) {
+            Write-Warning 'Neither the Defender machines API nor the configured advanced hunting fallback was available. Skipping disable/delete actions for this run.'
+            $summary.status = 'NoAction'
+            $summary.severity = 'Warning'
+            $summary.summaryText = 'Defender heartbeat data was unavailable from both the machines API and advanced hunting fallback, so the safety failsafe skipped disable/delete actions for this run.'
+            $summary.finishedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
+            Invoke-DeviceCleanupNotification -Settings $settings -Summary ([pscustomobject] $summary)
+            return [pscustomobject] $summary
         }
 
         $candidates = @()
@@ -1760,7 +1935,7 @@ function Invoke-DeviceCleanupJob {
             }
 
             Write-Output "Archiving '$displayName' ($($device.id)) before deletion after $($candidate.InactiveDays) inactive day(s). EffectiveHeartbeat=$($candidate.HeartbeatSource)@$($candidate.HeartbeatTimestamp)"
-            $archiveResult = Save-DeviceArchive -Device $device -Settings $settings -CheckInData $checkInData
+            $archiveResult = Save-DeviceArchive -Device $device -Settings $settings -CleanupRunId $cleanupRunId -Candidate $candidate -CheckInData $checkInData
             Remove-EntraDevice -EntraObjectId $device.id
             Write-Output "Archived and deleted '$displayName'. Secret=$($archiveResult.SecretName); LAPS=$($archiveResult.LapsCredentialCount); BitLockerKeys=$($archiveResult.BitLockerKeyCount)"
             $summary.results.archivedDeletedDevices += @(New-DeviceCleanupActionRecord -Device $device -Candidate $candidate -Mode 'Executed' -ArchiveResult $archiveResult)

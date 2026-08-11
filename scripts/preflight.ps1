@@ -119,6 +119,21 @@ function Get-DefaultDynamicGroupName {
   return "$EnvironmentName - $SourceLabel stale devices"
 }
 
+function Get-DefaultDynamicGroupRule {
+  param(
+    [Parameter(Mandatory = $true)]
+    [int] $AttributeNumber,
+    [Parameter(Mandatory = $true)]
+    [string] $SourceLabel
+  )
+
+  if ($AttributeNumber -le 0) {
+    throw "A positive extensionAttribute slot is required to derive the default $SourceLabel dynamic group rule."
+  }
+
+  return "device.extensionAttribute$AttributeNumber -startsWith `"Stale|`""
+}
+
 function Get-GraphAccessToken {
   az account get-access-token --resource-type ms-graph --query accessToken --output tsv --only-show-errors
 }
@@ -305,6 +320,43 @@ function Assert-KeyVaultRoleAssignment {
   }
 }
 
+function Assert-KeyVaultConfiguration {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $VaultName,
+    [AllowEmptyString()]
+    [string] $ExpectedRetentionInDays
+  )
+
+  $vault = az keyvault show --name $VaultName --query '{enableRbacAuthorization:properties.enableRbacAuthorization,enablePurgeProtection:properties.enablePurgeProtection,softDeleteRetentionInDays:properties.softDeleteRetentionInDays}' --output json --only-show-errors | ConvertFrom-Json
+  if (-not $vault.enableRbacAuthorization) {
+    throw "Key Vault '$VaultName' is not using Azure RBAC for data-plane authorization."
+  }
+
+  if (-not $vault.enablePurgeProtection) {
+    throw "Key Vault '$VaultName' does not have purge protection enabled."
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($ExpectedRetentionInDays)) {
+    $expectedRetention = [int] $ExpectedRetentionInDays
+    if ([int] $vault.softDeleteRetentionInDays -ne $expectedRetention) {
+      throw "Key Vault '$VaultName' soft-delete retention is $($vault.softDeleteRetentionInDays) day(s), expected $expectedRetention."
+    }
+  }
+}
+
+function Assert-DeleteLock {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $ResourceGroupName
+  )
+
+  $locks = @(az lock list --resource-group $ResourceGroupName --query "[?level=='CanNotDelete']" --output json --only-show-errors | ConvertFrom-Json)
+  if ($locks.Count -eq 0) {
+    throw "Resource group '$ResourceGroupName' is expected to have a CanNotDelete lock, but none was found."
+  }
+}
+
 function Get-LogicAppWorkflow {
   param(
     [Parameter(Mandatory = $true)]
@@ -432,21 +484,28 @@ $envValues = Get-AzdEnvironmentValues -RepositoryRoot $repoRoot
 
 $subscriptionId = Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'AZURE_SUBSCRIPTION_ID'
 $tenantId = Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'AZURE_TENANT_ID'
+$null = az account set --subscription $subscriptionId --only-show-errors
 $environmentName = Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'AZURE_ENV_NAME'
 $resourceGroupName = Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'AZURE_RESOURCE_GROUP'
 $automationAccountName = Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'AUTOMATION_ACCOUNT_NAME'
 $runbookName = Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'AUTOMATION_RUNBOOK_NAME'
 $automationPrincipalId = Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'AUTOMATION_ACCOUNT_PRINCIPAL_ID'
 $keyVaultName = Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'DEVICE_ARCHIVE_KEY_VAULT_NAME'
+$deviceArchiveRetentionInDays = Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'DEVICE_ARCHIVE_RETENTION_IN_DAYS'
 $advancedHuntingEnabled = ConvertTo-BooleanValue -Name 'ADVANCED_HUNTING_ENABLED' -Value (Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'ADVANCED_HUNTING_ENABLED')
 $intuneDynamicGroupEnabled = ConvertTo-BooleanValue -Name 'INTUNE_DYNAMIC_GROUP_ENABLED' -Value (Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'INTUNE_DYNAMIC_GROUP_ENABLED')
 $defenderDynamicGroupEnabled = ConvertTo-BooleanValue -Name 'DEFENDER_DYNAMIC_GROUP_ENABLED' -Value (Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'DEFENDER_DYNAMIC_GROUP_ENABLED')
+$intuneCheckInAttributeNumber = [int](Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'INTUNE_CHECKIN_ATTRIBUTE_NUMBER')
+$defenderCheckInAttributeNumber = [int](Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'DEFENDER_CHECKIN_ATTRIBUTE_NUMBER')
 $logicAppNotificationsEnabled = ConvertTo-BooleanValue -Name 'LOGIC_APP_NOTIFICATIONS_ENABLED' -Value (Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'LOGIC_APP_NOTIFICATIONS_ENABLED')
 $logicAppNotificationWorkflowName = Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'LOGIC_APP_NOTIFICATION_WORKFLOW_NAME'
+$enableDeleteLock = ConvertTo-BooleanValue -Name 'ENABLE_DELETE_LOCK' -Value (Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'ENABLE_DELETE_LOCK')
 $exclusionGroupObjectId = Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'EXCLUSION_DEVICE_GROUP_OBJECT_ID'
 $exclusionGroupName = Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'EXCLUSION_DEVICE_GROUP_NAME'
 $intuneDynamicGroupName = Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'INTUNE_DYNAMIC_GROUP_NAME'
+$intuneDynamicGroupRule = Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'INTUNE_DYNAMIC_GROUP_RULE'
 $defenderDynamicGroupName = Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'DEFENDER_DYNAMIC_GROUP_NAME'
+$defenderDynamicGroupRule = Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'DEFENDER_DYNAMIC_GROUP_RULE'
 
 Connect-AzPowerShellFromCli -SubscriptionId $subscriptionId -TenantId $tenantId
 
@@ -464,10 +523,14 @@ $requiredGraphRoles = @(
 if ($advancedHuntingEnabled) {
   $requiredGraphRoles += 'ThreatHunting.Read.All'
 }
-
 Assert-AppRoleAssignments -PrincipalId $automationPrincipalId -ResourceServicePrincipal $graphSp -RequiredRoles $requiredGraphRoles
-Assert-AppRoleAssignments -PrincipalId $automationPrincipalId -ResourceServicePrincipal $defenderSp -RequiredRoles @('Machine.Read.All')
+if ($defenderCheckInAttributeNumber -gt 0) {
+  Assert-AppRoleAssignments -PrincipalId $automationPrincipalId -ResourceServicePrincipal $defenderSp -RequiredRoles @(
+    'Machine.Read.All'
+  )
+}
 Assert-KeyVaultRoleAssignment -PrincipalId $automationPrincipalId -VaultName $keyVaultName
+Assert-KeyVaultConfiguration -VaultName $keyVaultName -ExpectedRetentionInDays $deviceArchiveRetentionInDays
 
 $runbook = Get-AzAutomationRunbook -ResourceGroupName $resourceGroupName -AutomationAccountName $automationAccountName -Name $runbookName
 if ($runbook.State -ne 'Published') {
@@ -485,16 +548,46 @@ if (@($exclusionGroup.groupTypes) -contains 'DynamicMembership') {
 
 if ($intuneDynamicGroupEnabled) {
   $intuneDynamicGroup = Resolve-DynamicGroup -EnvironmentName $environmentName -SourceLabel 'Intune' -ConfiguredName $intuneDynamicGroupName
+  if (-not $intuneDynamicGroup.securityEnabled -or $intuneDynamicGroup.mailEnabled) {
+    throw "Intune dynamic group '$($intuneDynamicGroup.displayName)' is not a security-only Microsoft Entra group."
+  }
+
   if (@($intuneDynamicGroup.groupTypes) -notcontains 'DynamicMembership' -or $intuneDynamicGroup.membershipRuleProcessingState -ne 'On') {
     throw "Intune dynamic group '$($intuneDynamicGroup.displayName)' is not configured as an active dynamic membership group."
+  }
+
+  $expectedIntuneRule = $intuneDynamicGroupRule
+  if ([string]::IsNullOrWhiteSpace($expectedIntuneRule)) {
+    $expectedIntuneRule = Get-DefaultDynamicGroupRule -AttributeNumber $intuneCheckInAttributeNumber -SourceLabel 'Intune'
+  }
+
+  if ($intuneDynamicGroup.membershipRule.Trim() -ne $expectedIntuneRule.Trim()) {
+    throw "Intune dynamic group '$($intuneDynamicGroup.displayName)' membership rule drifted. Current='$($intuneDynamicGroup.membershipRule)' Expected='$expectedIntuneRule'."
   }
 }
 
 if ($defenderDynamicGroupEnabled) {
   $defenderDynamicGroup = Resolve-DynamicGroup -EnvironmentName $environmentName -SourceLabel 'Defender' -ConfiguredName $defenderDynamicGroupName
+  if (-not $defenderDynamicGroup.securityEnabled -or $defenderDynamicGroup.mailEnabled) {
+    throw "Defender dynamic group '$($defenderDynamicGroup.displayName)' is not a security-only Microsoft Entra group."
+  }
+
   if (@($defenderDynamicGroup.groupTypes) -notcontains 'DynamicMembership' -or $defenderDynamicGroup.membershipRuleProcessingState -ne 'On') {
     throw "Defender dynamic group '$($defenderDynamicGroup.displayName)' is not configured as an active dynamic membership group."
   }
+
+  $expectedDefenderRule = $defenderDynamicGroupRule
+  if ([string]::IsNullOrWhiteSpace($expectedDefenderRule)) {
+    $expectedDefenderRule = Get-DefaultDynamicGroupRule -AttributeNumber $defenderCheckInAttributeNumber -SourceLabel 'Defender'
+  }
+
+  if ($defenderDynamicGroup.membershipRule.Trim() -ne $expectedDefenderRule.Trim()) {
+    throw "Defender dynamic group '$($defenderDynamicGroup.displayName)' membership rule drifted. Current='$($defenderDynamicGroup.membershipRule)' Expected='$expectedDefenderRule'."
+  }
+}
+
+if ($enableDeleteLock) {
+  Assert-DeleteLock -ResourceGroupName $resourceGroupName
 }
 
 if ($logicAppNotificationsEnabled) {
@@ -508,7 +601,7 @@ if ($logicAppNotificationsEnabled) {
   }
 }
 
-Write-Host "Preflight checks passed for permissions, Key Vault RBAC, runbook publish state, Microsoft Entra groups, and Logic App configuration."
+Write-Host "Preflight checks passed for permissions, Key Vault RBAC/configuration, runbook publish state, Microsoft Entra groups and rules, delete-lock protection, and Logic App configuration."
 
 if (-not $SkipAutomationJob) {
   $automationValidationStartedAtUtc = (Get-Date).ToUniversalTime()

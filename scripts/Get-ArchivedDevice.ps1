@@ -4,6 +4,9 @@ param(
   [string] $DisplayName = '',
   [string] $DeviceId = '',
   [string] $EntraObjectId = '',
+  [string] $SerialNumber = '',
+  [string] $IntuneManagedDeviceId = '',
+  [string] $DefenderMachineId = '',
   [string] $SecretName = '',
   [switch] $ShowRecoveryMaterial,
   [switch] $AsJson
@@ -143,6 +146,12 @@ function Test-Match {
     [AllowEmptyString()]
     [string] $EntraObjectId,
     [AllowEmptyString()]
+    [string] $SerialNumber,
+    [AllowEmptyString()]
+    [string] $IntuneManagedDeviceId,
+    [AllowEmptyString()]
+    [string] $DefenderMachineId,
+    [AllowEmptyString()]
     [string] $SecretName
   )
 
@@ -163,6 +172,18 @@ function Test-Match {
     return $false
   }
 
+  if (-not [string]::IsNullOrWhiteSpace($SerialNumber) -and (($null -eq $tags) -or ($tags.serialNumber -ne $SerialNumber))) {
+    return $false
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($IntuneManagedDeviceId) -and (($null -eq $tags) -or ($tags.intuneManagedDeviceId -ne $IntuneManagedDeviceId))) {
+    return $false
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($DefenderMachineId) -and (($null -eq $tags) -or ($tags.defenderMachineId -ne $DefenderMachineId))) {
+    return $false
+  }
+
   if ([string]::IsNullOrWhiteSpace($Search)) {
     return $true
   }
@@ -170,7 +191,15 @@ function Test-Match {
   $searchLower = $Search.ToLowerInvariant()
   $candidateValues = @($Secret.id.Split('/')[-1])
   if ($null -ne $tags) {
-    $candidateValues += @($tags.displayName, $tags.deviceId, $tags.entraObjectId)
+    $candidateValues += @(
+      $tags.displayName,
+      $tags.deviceId,
+      $tags.entraObjectId,
+      $tags.serialNumber,
+      $tags.intuneManagedDeviceId,
+      $tags.defenderMachineId,
+      $tags.cleanupRunId
+    )
   }
 
   $candidateValues = @($candidateValues | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
@@ -194,12 +223,30 @@ function ConvertTo-Summary {
   $displayName = $null
   $deviceId = $null
   $entraObjectId = $null
+  $serialNumber = $null
+  $intuneManagedDeviceId = $null
+  $defenderMachineId = $null
   $archivedAt = $null
+  $cleanupRunId = $null
+  $effectiveHeartbeatSource = $null
+  $effectiveHeartbeatTimestamp = $null
+  $lastSeenEntra = $null
+  $lastSeenIntune = $null
+  $lastSeenDefender = $null
   if ($null -ne $tags) {
     $displayName = $tags.displayName
     $deviceId = $tags.deviceId
     $entraObjectId = $tags.entraObjectId
+    $serialNumber = $tags.serialNumber
+    $intuneManagedDeviceId = $tags.intuneManagedDeviceId
+    $defenderMachineId = $tags.defenderMachineId
     $archivedAt = $tags.archivedAt
+    $cleanupRunId = $tags.cleanupRunId
+    $effectiveHeartbeatSource = $tags.effectiveHeartbeatSource
+    $effectiveHeartbeatTimestamp = $tags.effectiveHeartbeatTimestamp
+    $lastSeenEntra = $tags.lastSeenEntra
+    $lastSeenIntune = $tags.lastSeenIntune
+    $lastSeenDefender = $tags.lastSeenDefender
   }
 
   return [pscustomobject]@{
@@ -207,7 +254,16 @@ function ConvertTo-Summary {
     DisplayName = $displayName
     DeviceId = $deviceId
     EntraObjectId = $entraObjectId
+    SerialNumber = $serialNumber
+    IntuneManagedDeviceId = $intuneManagedDeviceId
+    DefenderMachineId = $defenderMachineId
     ArchivedAt = $archivedAt
+    CleanupRunId = $cleanupRunId
+    EffectiveHeartbeatSource = $effectiveHeartbeatSource
+    EffectiveHeartbeatTimestamp = $effectiveHeartbeatTimestamp
+    LastSeenEntra = $lastSeenEntra
+    LastSeenIntune = $lastSeenIntune
+    LastSeenDefender = $lastSeenDefender
   }
 }
 
@@ -230,6 +286,7 @@ function ConvertTo-ArchiveView {
   $view = [ordered]@{
     secretName = $SecretName
     archivedAt = $ArchivePayload.archivedAt
+    cleanupContext = $ArchivePayload.cleanupContext
     device = $ArchivePayload.device
     heartbeats = $ArchivePayload.heartbeats
     intune = $ArchivePayload.intune
@@ -260,6 +317,9 @@ $matches = @($allSecrets | Where-Object {
     -DisplayName $DisplayName `
     -DeviceId $DeviceId `
     -EntraObjectId $EntraObjectId `
+    -SerialNumber $SerialNumber `
+    -IntuneManagedDeviceId $IntuneManagedDeviceId `
+    -DefenderMachineId $DefenderMachineId `
     -SecretName $SecretName
 })
 
@@ -277,7 +337,7 @@ if (($matches.Count -gt 1) -and (-not $ShowRecoveryMaterial)) {
     $summaries | Format-Table -AutoSize
   }
 
-  Write-Host "Multiple matches were found. Re-run with -SecretName, -EntraObjectId, -DeviceId, or -ShowRecoveryMaterial for a single record."
+  Write-Host "Multiple matches were found. Re-run with -SecretName, -EntraObjectId, -DeviceId, -SerialNumber, -IntuneManagedDeviceId, -DefenderMachineId, or -ShowRecoveryMaterial for a single record."
   exit 0
 }
 
