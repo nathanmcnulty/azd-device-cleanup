@@ -143,6 +143,10 @@ function Get-HttpStatusCode {
         [System.Management.Automation.ErrorRecord] $ErrorRecord
     )
 
+    if ($ErrorRecord.Exception.PSObject.Properties.Name -notcontains 'Response') {
+        return $null
+    }
+
     $response = $ErrorRecord.Exception.Response
     if ($null -eq $response) {
         return $null
