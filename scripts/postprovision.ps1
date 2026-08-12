@@ -1,5 +1,16 @@
 $ErrorActionPreference = 'Stop'
 
+function Assert-NativeCommandSucceeded {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $Description
+  )
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "$Description failed with exit code $LASTEXITCODE."
+  }
+}
+
 function Get-AzdEnvironmentValues {
   param(
     [Parameter(Mandatory = $true)]
@@ -109,6 +120,7 @@ function Ensure-AzAutomationModule {
 
 function Ensure-AutomationExtension {
   az extension add --name automation --upgrade --only-show-errors | Out-Null
+  Assert-NativeCommandSucceeded -Description 'Installing or updating the Azure Automation CLI extension'
 }
 
 function Get-RunbookContentPath {
@@ -660,6 +672,7 @@ else {
 $subscriptionId = Get-RequiredEnvironmentValue -Name 'AZURE_SUBSCRIPTION_ID'
 $tenantId = Get-RequiredEnvironmentValue -Name 'AZURE_TENANT_ID'
 $null = az account set --subscription $subscriptionId --only-show-errors
+Assert-NativeCommandSucceeded -Description "Selecting Azure subscription '$subscriptionId'"
 $environmentName = Get-RequiredEnvironmentValue -Name 'AZURE_ENV_NAME'
 $resourceGroupName = Get-RequiredEnvironmentValue -Name 'AZURE_RESOURCE_GROUP'
 $automationAccountName = Get-RequiredEnvironmentValue -Name 'AUTOMATION_ACCOUNT_NAME'
@@ -745,6 +758,7 @@ try {
     --name $runbookName `
     --content "@$renderedRunbookPath" `
     --only-show-errors | Out-Null
+  Assert-NativeCommandSucceeded -Description "Replacing content for Automation runbook '$runbookName'"
 
   az automation runbook publish `
     --automation-account-name $automationAccountName `
@@ -752,6 +766,7 @@ try {
     --subscription $subscriptionId `
     --name $runbookName `
     --only-show-errors | Out-Null
+  Assert-NativeCommandSucceeded -Description "Publishing Automation runbook '$runbookName'"
 
   $existingScheduledRunbook = Get-AzAutomationScheduledRunbook `
     -ResourceGroupName $resourceGroupName `

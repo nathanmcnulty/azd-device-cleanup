@@ -55,7 +55,7 @@ flowchart LR
 3. The same post-provision step publishes `runbooks/DeviceCleanup.ps1`, stamps in the environment-specific defaults, and links it to the Automation schedule.
 4. The runbook disables devices at the first threshold, then archives and deletes only devices that are already disabled and have crossed the later threshold.
 
-Missing LAPS or BitLocker data is treated as expected. Retrieval or Key Vault write failures block deletion for that device.
+Missing LAPS or BitLocker data is treated as expected. Retrieval or Key Vault write failures block deletion for that device, record a partial-run failure, and do not prevent the runbook from processing other candidates.
 
 The inactivity decision is based on the **latest available heartbeat**, not only on Entra `approximateLastSignInDateTime`. That makes the workflow safer when a device is still alive in Intune, Defender for Endpoint, or advanced hunting data even if its Entra certificate is broken.
 
@@ -296,7 +296,7 @@ The summary payload includes:
 - run status and severity
 - candidate counts, dry-run counts, executed disable/delete counts, and excluded-device counts
 - per-device execution details for disable/archive-delete actions
-- failure details when a run terminates with an error
+- failure details when a run terminates with an error, plus per-device action failures when a run partially succeeds
 
 ## Exclusion security group
 
@@ -456,12 +456,12 @@ Use separate access paths for automation and human recovery:
 - The Automation Account uses a system-assigned managed identity and writes archives to Key Vault through RBAC.
 - Defender state uses the Defender for Endpoint machines API as the primary source. Optional Microsoft Graph advanced hunting adds event evidence and can provide a fallback heartbeat.
 - The same runbook can update check-in extension attributes across `AzureAd`, `ServerAd`, `Workplace`, and null-trust device types. This was tested in the tenant used for validation.
-- Devices in a restricted management administrative unit can reject extensionAttribute updates unless the Automation identity is scoped into that administrative unit. The runbook logs and skips those devices instead of failing the whole run.
+- Devices in a restricted management administrative unit can reject extensionAttribute updates or lifecycle actions unless the Automation identity is scoped into that administrative unit. The runbook logs those per-device failures, skips the protected device, and continues processing other candidates.
 - For high-value devices and the groups that protect them, consider a **restricted management administrative unit (RMAU)** so accidental cleanup or group changes require the correct scoped administrative role.
 - The Defender machines API uses the tenant's configured machine-retention period. Advanced hunting is optional, limited to a maximum 30-day lookback, and provides supplemental event evidence or a fallback when the machines API is unavailable. If both Defender sources are unavailable, the run skips disable/delete actions for that run.
 - If a tenant does not have the required advanced hunting licensing or data sources, set `advancedHuntingEnabled=false`; the Defender machines API can still provide the primary heartbeat and extension-attribute data.
 - The resource group gets a `CanNotDelete` lock by default. Remove it before running `azd down`.
 - Missing LAPS or BitLocker data does **not** block deletion.
-- Archive retrieval or Key Vault write failures **do** block deletion.
+- Archive retrieval or Key Vault write failures **do** block deletion for the affected device and produce a partial-success failure notification without stopping the remaining candidate batch.
 - Archived device records now include correlation metadata (`cleanupRunId`, heartbeat source, and per-system identifiers) to make notifications and recovery lookups line up.
 - The current implementation deletes only the Entra device. Intune and Defender for Endpoint cleanup can be added around the same archive record later.

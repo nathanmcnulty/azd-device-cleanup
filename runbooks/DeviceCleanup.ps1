@@ -1476,6 +1476,7 @@ function Invoke-DeviceCleanupNotification {
 
     $sendNotification = switch ($Summary.status) {
         'Failed' { $Settings.NotifyOnFailure }
+        'PartiallySucceeded' { $Settings.NotifyOnFailure }
         'NoAction' { $Settings.NotifyOnNoAction }
         default { $Settings.NotifyOnSuccess }
     }
@@ -1753,12 +1754,14 @@ function Invoke-DeviceCleanupJob {
             archivedDeletedDevices = 0
             dryRunDisableCandidates = 0
             dryRunDeleteCandidates = 0
+            actionFailures = 0
         }
         results = [ordered]@{
             disabledDevices = @()
             archivedDeletedDevices = @()
             dryRunDisableDevices = @()
             dryRunDeleteDevices = @()
+            failedActions = @()
         }
         failure = $null
     }
@@ -1909,11 +1912,27 @@ function Invoke-DeviceCleanupJob {
                 continue
             }
 
-            Write-Output "Disabling '$displayName' ($($device.id)) after $($candidate.InactiveDays) inactive day(s). EffectiveHeartbeat=$($candidate.HeartbeatSource)@$($candidate.HeartbeatTimestamp)"
-            Disable-EntraDevice -EntraObjectId $device.id
-            Write-Output "Disabled '$displayName' ($($device.id))."
-            $summary.results.disabledDevices += @(New-DeviceCleanupActionRecord -Device $device -Candidate $candidate -Mode 'Executed' -ArchiveResult $null)
-            $summary.counts.disabledDevices++
+            try {
+                Write-Output "Disabling '$displayName' ($($device.id)) after $($candidate.InactiveDays) inactive day(s). EffectiveHeartbeat=$($candidate.HeartbeatSource)@$($candidate.HeartbeatTimestamp)"
+                Disable-EntraDevice -EntraObjectId $device.id
+                Write-Output "Disabled '$displayName' ($($device.id))."
+                $summary.results.disabledDevices += @(New-DeviceCleanupActionRecord -Device $device -Candidate $candidate -Mode 'Executed' -ArchiveResult $null)
+                $summary.counts.disabledDevices++
+            }
+            catch {
+                $isRestricted = Test-IsRestrictedManagementAdministrativeUnitError -ErrorRecord $_
+                $reason = if ($isRestricted) { 'RestrictedManagementAdministrativeUnit' } else { 'ActionFailed' }
+                Write-Warning "Failed to disable '$displayName' ($($device.id)); continuing with remaining candidates. Reason=$reason; Error=$($_.Exception.Message)"
+                $summary.results.failedActions += @([pscustomobject]@{
+                        displayName = $displayName
+                        entraObjectId = $device.id
+                        deviceId = $device.deviceId
+                        action = 'Disable'
+                        reason = $reason
+                        message = $_.Exception.Message
+                    })
+                $summary.counts.actionFailures++
+            }
         }
 
         foreach ($candidate in $deleteCandidates) {
@@ -1934,18 +1953,38 @@ function Invoke-DeviceCleanupJob {
                 continue
             }
 
-            Write-Output "Archiving '$displayName' ($($device.id)) before deletion after $($candidate.InactiveDays) inactive day(s). EffectiveHeartbeat=$($candidate.HeartbeatSource)@$($candidate.HeartbeatTimestamp)"
-            $archiveResult = Save-DeviceArchive -Device $device -Settings $settings -CleanupRunId $cleanupRunId -Candidate $candidate -CheckInData $checkInData
-            Remove-EntraDevice -EntraObjectId $device.id
-            Write-Output "Archived and deleted '$displayName'. Secret=$($archiveResult.SecretName); LAPS=$($archiveResult.LapsCredentialCount); BitLockerKeys=$($archiveResult.BitLockerKeyCount)"
-            $summary.results.archivedDeletedDevices += @(New-DeviceCleanupActionRecord -Device $device -Candidate $candidate -Mode 'Executed' -ArchiveResult $archiveResult)
-            $summary.counts.archivedDeletedDevices++
+            $archiveResult = $null
+            $failedPhase = 'Archive'
+            try {
+                Write-Output "Archiving '$displayName' ($($device.id)) before deletion after $($candidate.InactiveDays) inactive day(s). EffectiveHeartbeat=$($candidate.HeartbeatSource)@$($candidate.HeartbeatTimestamp)"
+                $archiveResult = Save-DeviceArchive -Device $device -Settings $settings -CleanupRunId $cleanupRunId -Candidate $candidate -CheckInData $checkInData
+                $failedPhase = 'Delete'
+                Remove-EntraDevice -EntraObjectId $device.id
+                Write-Output "Archived and deleted '$displayName'. Secret=$($archiveResult.SecretName); LAPS=$($archiveResult.LapsCredentialCount); BitLockerKeys=$($archiveResult.BitLockerKeyCount)"
+                $summary.results.archivedDeletedDevices += @(New-DeviceCleanupActionRecord -Device $device -Candidate $candidate -Mode 'Executed' -ArchiveResult $archiveResult)
+                $summary.counts.archivedDeletedDevices++
+            }
+            catch {
+                $isRestricted = Test-IsRestrictedManagementAdministrativeUnitError -ErrorRecord $_
+                $reason = if ($isRestricted) { 'RestrictedManagementAdministrativeUnit' } else { "${failedPhase}Failed" }
+                Write-Warning "Failed during $failedPhase for '$displayName' ($($device.id)); continuing with remaining candidates. Reason=$reason; Error=$($_.Exception.Message)"
+                $summary.results.failedActions += @([pscustomobject]@{
+                        displayName = $displayName
+                        entraObjectId = $device.id
+                        deviceId = $device.deviceId
+                        action = $failedPhase
+                        reason = $reason
+                        message = $_.Exception.Message
+                        secretName = if ($null -ne $archiveResult) { $archiveResult.SecretName } else { $null }
+                    })
+                $summary.counts.actionFailures++
+            }
         }
 
         $summary.finishedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
-        $summary.status = 'Succeeded'
-        $summary.severity = if (($summary.counts.dryRunDisableCandidates + $summary.counts.dryRunDeleteCandidates) -gt 0) { 'Warning' } else { 'Informational' }
-        $summary.summaryText = "Completed device cleanup run. DisableCandidates=$($summary.counts.disableCandidates); DeleteCandidates=$($summary.counts.deleteCandidates); Disabled=$($summary.counts.disabledDevices); ArchivedDeleted=$($summary.counts.archivedDeletedDevices); DryRunDisable=$($summary.counts.dryRunDisableCandidates); DryRunDelete=$($summary.counts.dryRunDeleteCandidates); Excluded=$($summary.counts.excludedDevices)."
+        $summary.status = if ($summary.counts.actionFailures -gt 0) { 'PartiallySucceeded' } else { 'Succeeded' }
+        $summary.severity = if (($summary.counts.actionFailures + $summary.counts.dryRunDisableCandidates + $summary.counts.dryRunDeleteCandidates) -gt 0) { 'Warning' } else { 'Informational' }
+        $summary.summaryText = "Completed device cleanup run. DisableCandidates=$($summary.counts.disableCandidates); DeleteCandidates=$($summary.counts.deleteCandidates); Disabled=$($summary.counts.disabledDevices); ArchivedDeleted=$($summary.counts.archivedDeletedDevices); DryRunDisable=$($summary.counts.dryRunDisableCandidates); DryRunDelete=$($summary.counts.dryRunDeleteCandidates); ActionFailures=$($summary.counts.actionFailures); Excluded=$($summary.counts.excludedDevices)."
         Invoke-DeviceCleanupNotification -Settings $settings -Summary ([pscustomobject] $summary)
         return [pscustomobject] $summary
     }
