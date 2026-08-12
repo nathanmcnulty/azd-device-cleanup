@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "14422833254970531854"
+      "templateHash": "13276738046716869811"
     }
   },
   "parameters": {
@@ -214,6 +214,20 @@
         "description": "Optional display name override for the Microsoft Entra exclusion security group. Leave empty to use an environment-based default."
       }
     },
+    "recoveryGroupObjectId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional object ID of an existing assigned Microsoft Entra security group whose members should receive Key Vault secret-read access. Leave empty to create or reuse a group by name."
+      }
+    },
+    "recoveryGroupName": {
+      "type": "string",
+      "defaultValue": "device-cleanup-recovery",
+      "metadata": {
+        "description": "Display name for the Microsoft Entra recovery group created or reused by post-provisioning when recoveryGroupObjectId is empty."
+      }
+    },
     "intuneDynamicGroupEnabled": {
       "type": "bool",
       "defaultValue": true,
@@ -279,13 +293,6 @@
         "description": "Prefix for archived device secrets in Key Vault."
       }
     },
-    "archiveReaderPrincipalId": {
-      "type": "string",
-      "defaultValue": "[deployer().objectId]",
-      "metadata": {
-        "description": "Optional principal that should receive read access to archived secrets."
-      }
-    },
     "retentionInDays": {
       "type": "int",
       "defaultValue": 90,
@@ -348,9 +355,6 @@
           "automationScheduleName": {
             "value": "[parameters('automationScheduleName')]"
           },
-          "archiveReaderPrincipalId": {
-            "value": "[parameters('archiveReaderPrincipalId')]"
-          },
           "cleanupScheduleFrequency": {
             "value": "[parameters('cleanupScheduleFrequency')]"
           },
@@ -395,7 +399,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "3738357049458936118"
+              "templateHash": "16249283300644205751"
             }
           },
           "parameters": {
@@ -497,13 +501,6 @@
                 "description": "Prefix for archived device secrets in Key Vault."
               }
             },
-            "archiveReaderPrincipalId": {
-              "type": "string",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Optional principal that should receive read access to archived secrets."
-              }
-            },
             "retentionInDays": {
               "type": "int",
               "minValue": 7,
@@ -514,8 +511,7 @@
             }
           },
           "variables": {
-            "keyVaultSecretsOfficerRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7')]",
-            "keyVaultSecretsUserRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]"
+            "keyVaultSecretsOfficerRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7')]"
           },
           "resources": [
             {
@@ -750,20 +746,6 @@
                 "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
                 "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"
               ]
-            },
-            {
-              "condition": "[not(empty(parameters('archiveReaderPrincipalId')))]",
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
-              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), parameters('archiveReaderPrincipalId'), 'KeyVaultSecretsUser')]",
-              "properties": {
-                "principalId": "[parameters('archiveReaderPrincipalId')]",
-                "roleDefinitionId": "[variables('keyVaultSecretsUserRoleId')]"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"
-              ]
             }
           ],
           "outputs": {
@@ -899,6 +881,14 @@
     "EXCLUSION_DEVICE_GROUP_OBJECT_ID": {
       "type": "string",
       "value": "[parameters('exclusionDeviceGroupObjectId')]"
+    },
+    "RECOVERY_GROUP_NAME": {
+      "type": "string",
+      "value": "[parameters('recoveryGroupName')]"
+    },
+    "RECOVERY_GROUP_OBJECT_ID": {
+      "type": "string",
+      "value": "[parameters('recoveryGroupObjectId')]"
     },
     "DEFENDER_DYNAMIC_GROUP_ENABLED": {
       "type": "string",

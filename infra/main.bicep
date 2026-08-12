@@ -102,6 +102,12 @@ param exclusionDeviceGroupObjectId string = ''
 @description('Optional display name override for the Microsoft Entra exclusion security group. Leave empty to use an environment-based default.')
 param exclusionDeviceGroupName string = ''
 
+@description('Optional object ID of an existing assigned Microsoft Entra security group whose members should receive Key Vault secret-read access. Leave empty to create or reuse a group by name.')
+param recoveryGroupObjectId string = ''
+
+@description('Display name for the Microsoft Entra recovery group created or reused by post-provisioning when recoveryGroupObjectId is empty.')
+param recoveryGroupName string = 'device-cleanup-recovery'
+
 @description('Create or update a Microsoft Entra dynamic device group for the Intune check-in attribute.')
 param intuneDynamicGroupEnabled bool = true
 
@@ -130,9 +136,6 @@ param advancedHuntingLookbackDays int = 30
 
 @description('Prefix for archived device secrets in Key Vault.')
 param secretNamePrefix string = 'device-cleanup'
-
-@description('Optional principal that should receive read access to archived secrets.')
-param archiveReaderPrincipalId string = deployer().objectId
 
 @minValue(7)
 @maxValue(90)
@@ -169,7 +172,6 @@ module resources './resources.bicep' = {
     automationRunbookName: automationRunbookName
     automationRuntimeEnvironmentName: automationRuntimeEnvironmentName
     automationScheduleName: automationScheduleName
-    archiveReaderPrincipalId: archiveReaderPrincipalId
     cleanupScheduleFrequency: cleanupScheduleFrequency
     cleanupScheduleInterval: cleanupScheduleInterval
     cleanupScheduleStartTime: cleanupScheduleStartTime
@@ -208,6 +210,8 @@ output DEVICE_DISABLE_AFTER_DAYS string = string(deviceDisableAfterDays)
 output DEVICE_DISABLE_ENABLED string = disableEnabled ? 'true' : 'false'
 output EXCLUSION_DEVICE_GROUP_NAME string = exclusionDeviceGroupName
 output EXCLUSION_DEVICE_GROUP_OBJECT_ID string = exclusionDeviceGroupObjectId
+output RECOVERY_GROUP_NAME string = recoveryGroupName
+output RECOVERY_GROUP_OBJECT_ID string = recoveryGroupObjectId
 output DEFENDER_DYNAMIC_GROUP_ENABLED string = defenderDynamicGroupEnabled ? 'true' : 'false'
 output DEFENDER_DYNAMIC_GROUP_NAME string = defenderDynamicGroupName
 output DEFENDER_DYNAMIC_GROUP_RULE string = defenderDynamicGroupRule

@@ -41,6 +41,12 @@
     "exclusionDeviceGroupObjectId": {
       "value": ""
     },
+    "recoveryGroupName": {
+      "value": "device-cleanup-recovery"
+    },
+    "recoveryGroupObjectId": {
+      "value": ""
+    },
     "disableEnabled": {
       "value": true
     },
