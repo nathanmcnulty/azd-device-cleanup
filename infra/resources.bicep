@@ -51,16 +51,12 @@ param cleanupScheduleTimeZone string
 @description('Prefix for archived device secrets in Key Vault.')
 param secretNamePrefix string
 
-@description('Optional principal that should receive read access to archived secrets.')
-param archiveReaderPrincipalId string = ''
-
 @minValue(7)
 @maxValue(90)
 @description('Retention period in days for Key Vault soft delete recovery.')
 param retentionInDays int
 
 var keyVaultSecretsOfficerRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7')
-var keyVaultSecretsUserRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: keyVaultName
   location: location
@@ -272,15 +268,6 @@ resource automationKeyVaultAccess 'Microsoft.Authorization/roleAssignments@2022-
     principalId: automationAccount.identity.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: keyVaultSecretsOfficerRoleId
-  }
-}
-
-resource archiveReaderAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(archiveReaderPrincipalId)) {
-  scope: keyVault
-  name: guid(keyVault.id, archiveReaderPrincipalId, 'KeyVaultSecretsUser')
-  properties: {
-    principalId: archiveReaderPrincipalId
-    roleDefinitionId: keyVaultSecretsUserRoleId
   }
 }
 

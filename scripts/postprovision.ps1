@@ -209,6 +209,10 @@ function Get-DefaultExclusionGroupName {
   return "$EnvironmentName - Device cleanup exclusions"
 }
 
+function Get-DefaultRecoveryGroupName {
+  return 'device-cleanup-recovery'
+}
+
 function Get-DefaultDynamicGroupRule {
   param(
     [Parameter(Mandatory = $true)]
@@ -271,7 +275,7 @@ function Get-GroupById {
 
   return Invoke-GraphJson `
     -Method 'GET' `
-    -Url "https://graph.microsoft.com/v1.0/groups/$GroupId?`$select=id,displayName,description,membershipRule,membershipRuleProcessingState,groupTypes,mailEnabled,mailNickname,securityEnabled"
+    -Url "https://graph.microsoft.com/v1.0/groups/${GroupId}?`$select=id,displayName,description,membershipRule,membershipRuleProcessingState,groupTypes,mailEnabled,mailNickname,securityEnabled"
 }
 
 function Ensure-AssignedSecurityGroup {
@@ -300,7 +304,7 @@ function Ensure-AssignedSecurityGroup {
         securityEnabled = $true
       }
 
-    Write-Host "Created exclusion security group '$DisplayName'."
+    Write-Host "Created assigned security group '$DisplayName'."
     return $createdGroup
   }
 
@@ -322,10 +326,10 @@ function Ensure-AssignedSecurityGroup {
       } | Out-Null
 
     $group = Get-GroupById -GroupId $group.id
-    Write-Host "Updated exclusion security group '$DisplayName'."
+    Write-Host "Updated assigned security group '$DisplayName'."
   }
   else {
-    Write-Host "Exclusion security group '$DisplayName' is already up to date."
+    Write-Host "Assigned security group '$DisplayName' is already up to date."
   }
 
   return $group
@@ -362,6 +366,78 @@ function Resolve-ExclusionGroup {
   return Ensure-AssignedSecurityGroup `
     -DisplayName $resolvedGroupName `
     -Description "Managed by azd-device-cleanup environment '$EnvironmentName'. Add device objects that should be excluded from disable and delete actions."
+}
+
+function Resolve-RecoveryGroup {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $EnvironmentName,
+    [AllowEmptyString()]
+    [string] $ConfiguredGroupId,
+    [AllowEmptyString()]
+    [string] $ConfiguredGroupName
+  )
+
+  if (-not [string]::IsNullOrWhiteSpace($ConfiguredGroupId)) {
+    $group = Get-GroupById -GroupId $ConfiguredGroupId
+    if (-not $group.securityEnabled -or $group.mailEnabled) {
+      throw "The configured recovery group '$ConfiguredGroupId' is not a security-only Microsoft Entra group."
+    }
+
+    if (@($group.groupTypes) -contains 'DynamicMembership') {
+      throw "The configured recovery group '$ConfiguredGroupId' uses dynamic membership. Use an assigned security group for archive recovery access."
+    }
+
+    return $group
+  }
+
+  $resolvedGroupName = $ConfiguredGroupName
+  if ([string]::IsNullOrWhiteSpace($resolvedGroupName)) {
+    $resolvedGroupName = Get-DefaultRecoveryGroupName
+  }
+
+  return Ensure-AssignedSecurityGroup `
+    -DisplayName $resolvedGroupName `
+    -Description "Managed by azd-device-cleanup environment '$EnvironmentName'. Add authorized recovery operators who may read archived LAPS and BitLocker secrets."
+}
+
+function Ensure-KeyVaultSecretsUserAssignment {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $SubscriptionId,
+    [Parameter(Mandatory = $true)]
+    [string] $VaultName,
+    [Parameter(Mandatory = $true)]
+    [string] $GroupObjectId
+  )
+
+  $vaultId = az keyvault show --subscription $SubscriptionId --name $VaultName --query id --output tsv --only-show-errors
+  Assert-NativeCommandSucceeded -Description "Resolving Key Vault '$VaultName'"
+
+  $existingAssignment = az role assignment list `
+    --subscription $SubscriptionId `
+    --assignee-object-id $GroupObjectId `
+    --scope $vaultId `
+    --role 'Key Vault Secrets User' `
+    --query '[0].id' `
+    --output tsv `
+    --only-show-errors
+  Assert-NativeCommandSucceeded -Description "Checking recovery group access on Key Vault '$VaultName'"
+
+  if (-not [string]::IsNullOrWhiteSpace($existingAssignment)) {
+    Write-Host "Recovery group already has 'Key Vault Secrets User' on '$VaultName'."
+    return
+  }
+
+  az role assignment create `
+    --subscription $SubscriptionId `
+    --assignee-object-id $GroupObjectId `
+    --assignee-principal-type Group `
+    --scope $vaultId `
+    --role 'Key Vault Secrets User' `
+    --only-show-errors | Out-Null
+  Assert-NativeCommandSucceeded -Description "Assigning Key Vault secret-read access to recovery group '$GroupObjectId'"
+  Write-Host "Assigned recovery group 'Key Vault Secrets User' on '$VaultName'."
 }
 
 function Ensure-DynamicDeviceGroup {
@@ -687,6 +763,8 @@ $deviceDisableEnabled = Get-RequiredEnvironmentValue -Name 'DEVICE_DISABLE_ENABL
 $deviceDeleteEnabled = Get-RequiredEnvironmentValue -Name 'DEVICE_DELETE_ENABLED'
 $exclusionDeviceGroupName = Get-OptionalEnvironmentValue -Name 'EXCLUSION_DEVICE_GROUP_NAME'
 $exclusionDeviceGroupObjectId = Get-OptionalEnvironmentValue -Name 'EXCLUSION_DEVICE_GROUP_OBJECT_ID'
+$recoveryGroupName = Get-OptionalEnvironmentValue -Name 'RECOVERY_GROUP_NAME' -Default 'device-cleanup-recovery'
+$recoveryGroupObjectId = Get-OptionalEnvironmentValue -Name 'RECOVERY_GROUP_OBJECT_ID'
 $intuneCheckInAttributeNumber = Get-RequiredEnvironmentValue -Name 'INTUNE_CHECKIN_ATTRIBUTE_NUMBER'
 $defenderCheckInAttributeNumber = Get-RequiredEnvironmentValue -Name 'DEFENDER_CHECKIN_ATTRIBUTE_NUMBER'
 $intuneDynamicGroupEnabled = Get-RequiredEnvironmentValue -Name 'INTUNE_DYNAMIC_GROUP_ENABLED'
@@ -722,6 +800,16 @@ $resolvedExclusionGroup = Resolve-ExclusionGroup `
   -ConfiguredGroupName $exclusionDeviceGroupName
 $resolvedExclusionGroupId = $resolvedExclusionGroup.id
 $resolvedExclusionGroupName = $resolvedExclusionGroup.displayName
+$resolvedRecoveryGroup = Resolve-RecoveryGroup `
+  -EnvironmentName $environmentName `
+  -ConfiguredGroupId $recoveryGroupObjectId `
+  -ConfiguredGroupName $recoveryGroupName
+azd env set RECOVERY_GROUP_OBJECT_ID $resolvedRecoveryGroup.id | Out-Null
+Assert-NativeCommandSucceeded -Description 'Persisting the resolved recovery group object ID'
+Ensure-KeyVaultSecretsUserAssignment `
+  -SubscriptionId $subscriptionId `
+  -VaultName $keyVaultName `
+  -GroupObjectId $resolvedRecoveryGroup.id
 $runbookTemplatePath = Get-RunbookContentPath
 $renderedRunbookPath = Get-RenderedRunbookPath -RunbookTemplatePath $runbookTemplatePath -Replacements @{
   '__DEVICE_ARCHIVE_KEY_VAULT_NAME__' = $keyVaultName
@@ -838,4 +926,4 @@ finally {
   Remove-Item -LiteralPath $renderedRunbookPath -ErrorAction SilentlyContinue
 }
 
-Write-Host "Runbook '$runbookName' published and linked to schedule '$scheduleName'. ExclusionGroup='$resolvedExclusionGroupName' ($resolvedExclusionGroupId)."
+Write-Host "Runbook '$runbookName' published and linked to schedule '$scheduleName'. ExclusionGroup='$resolvedExclusionGroupName' ($resolvedExclusionGroupId); RecoveryGroup='$($resolvedRecoveryGroup.displayName)' ($($resolvedRecoveryGroup.id))."

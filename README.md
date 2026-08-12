@@ -222,6 +222,8 @@ The default deployment wires these settings into the published runbook:
 | `deleteEnabled` | `false` | **No deletion by default** |
 | `exclusionDeviceGroupObjectId` | empty | Optional existing Microsoft Entra security group object ID for devices excluded from disable/delete |
 | `exclusionDeviceGroupName` | empty | Optional display name override for the exclusion security group created by post-provision |
+| `recoveryGroupObjectId` | empty | Optional existing assigned Microsoft Entra security group object ID for archive recovery operators |
+| `recoveryGroupName` | `device-cleanup-recovery` | Group created or reused when no recovery group object ID is supplied |
 | `intuneCheckInExtensionAttributeNumber` | `14` | Device extensionAttribute slot for Intune check-in state; set `0` to disable |
 | `defenderCheckInExtensionAttributeNumber` | `15` | Device extensionAttribute slot for Defender check-in state from the Defender machines API; set `0` to disable that source |
 | `intuneDynamicGroupEnabled` | `true` | Create or update a dynamic device group for the Intune check-in attribute |
@@ -444,7 +446,9 @@ This solution preserves **recovery material and cleanup evidence**, not a full d
 Use separate access paths for automation and human recovery:
 
 - The Automation Account managed identity should keep only the write access it needs for cleanup and archive creation.
-- Human operators who may retrieve LAPS or BitLocker material should be granted the minimum Key Vault data-plane role required for read access, and only on the archive vault.
+- Post-provisioning creates or reuses the assigned `device-cleanup-recovery` security group, or accepts `recoveryGroupObjectId`, and grants it `Key Vault Secrets User` only on the archive vault.
+- Add human operators who may retrieve LAPS or BitLocker material to that recovery group. Use PIM for Groups or another approval process when eligible access is required; Azure RBAC assignment alone does not make group membership eligible.
+- The deployment does not grant the deploying user direct secret access. Existing environments upgraded from an earlier version should review and remove any obsolete direct `Key Vault Secrets User` assignments after confirming group-based recovery access.
 - Treat archive read access as a privileged recovery action and review it regularly.
 - If high-value devices or exclusion groups need tighter control, place them behind a restricted management administrative unit (RMAU) and scope recovery permissions accordingly.
 
@@ -454,7 +458,7 @@ Use separate access paths for automation and human recovery:
 - The preflight validator is `scripts/preflight.ps1`.
 - The archive retrieval helper is `scripts/Get-ArchivedDevice.ps1`.
 - The Automation Account uses a system-assigned managed identity and writes archives to Key Vault through RBAC.
-- Defender state uses the Defender for Endpoint machines API as the primary source. Optional Microsoft Graph advanced hunting adds event evidence and can provide a fallback heartbeat.
+- Defender state uses `GET /api/machines` from the Defender for Endpoint API as the primary source, including for Defender for Business and Defender for Endpoint Plan 1 tenants where Microsoft Graph `runHuntingQuery` is unavailable. Optional Graph advanced hunting adds event evidence and can provide a fallback heartbeat only where licensed.
 - The same runbook can update check-in extension attributes across `AzureAd`, `ServerAd`, `Workplace`, and null-trust device types. This was tested in the tenant used for validation.
 - Devices in a restricted management administrative unit can reject extensionAttribute updates or lifecycle actions unless the Automation identity is scoped into that administrative unit. The runbook logs those per-device failures, skips the protected device, and continues processing other candidates.
 - For high-value devices and the groups that protect them, consider a **restricted management administrative unit (RMAU)** so accidental cleanup or group changes require the correct scoped administrative role.

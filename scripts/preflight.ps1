@@ -108,6 +108,10 @@ function Get-DefaultExclusionGroupName {
   return "$EnvironmentName - Device cleanup exclusions"
 }
 
+function Get-DefaultRecoveryGroupName {
+  return 'device-cleanup-recovery'
+}
+
 function Get-DefaultDynamicGroupName {
   param(
     [Parameter(Mandatory = $true)]
@@ -240,7 +244,7 @@ function Get-GroupById {
     [string] $GroupId
   )
 
-  Invoke-GraphJson -Method 'GET' -Url "https://graph.microsoft.com/v1.0/groups/$GroupId?`$select=id,displayName,description,membershipRule,membershipRuleProcessingState,groupTypes,mailEnabled,securityEnabled"
+  Invoke-GraphJson -Method 'GET' -Url "https://graph.microsoft.com/v1.0/groups/${GroupId}?`$select=id,displayName,description,membershipRule,membershipRuleProcessingState,groupTypes,mailEnabled,securityEnabled"
 }
 
 function Get-GroupByDisplayName {
@@ -317,6 +321,22 @@ function Assert-KeyVaultRoleAssignment {
   $assignments = @(az role assignment list --assignee-object-id $PrincipalId --scope $vaultId --query "[].roleDefinitionName" --output tsv --only-show-errors)
   if ($assignments -notcontains 'Key Vault Secrets Officer') {
     throw "Managed identity does not have the 'Key Vault Secrets Officer' role on vault '$VaultName'."
+  }
+
+}
+
+function Assert-KeyVaultRecoveryRoleAssignment {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $GroupObjectId,
+    [Parameter(Mandatory = $true)]
+    [string] $VaultName
+  )
+
+  $vaultId = az keyvault show --name $VaultName --query id --output tsv --only-show-errors
+  $assignments = @(az role assignment list --assignee-object-id $GroupObjectId --scope $vaultId --query "[].roleDefinitionName" --output tsv --only-show-errors)
+  if ($assignments -notcontains 'Key Vault Secrets User') {
+    throw "Recovery group '$GroupObjectId' does not have the 'Key Vault Secrets User' role on vault '$VaultName'."
   }
 }
 
@@ -502,6 +522,8 @@ $logicAppNotificationWorkflowName = Get-OptionalEnvironmentValue -EnvironmentVal
 $enableDeleteLock = ConvertTo-BooleanValue -Name 'ENABLE_DELETE_LOCK' -Value (Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'ENABLE_DELETE_LOCK')
 $exclusionGroupObjectId = Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'EXCLUSION_DEVICE_GROUP_OBJECT_ID'
 $exclusionGroupName = Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'EXCLUSION_DEVICE_GROUP_NAME'
+$recoveryGroupObjectId = Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'RECOVERY_GROUP_OBJECT_ID'
+$recoveryGroupName = Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'RECOVERY_GROUP_NAME' -Default (Get-DefaultRecoveryGroupName)
 $intuneDynamicGroupName = Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'INTUNE_DYNAMIC_GROUP_NAME'
 $intuneDynamicGroupRule = Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'INTUNE_DYNAMIC_GROUP_RULE'
 $defenderDynamicGroupName = Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'DEFENDER_DYNAMIC_GROUP_NAME'
@@ -531,6 +553,22 @@ if ($defenderCheckInAttributeNumber -gt 0) {
 }
 Assert-KeyVaultRoleAssignment -PrincipalId $automationPrincipalId -VaultName $keyVaultName
 Assert-KeyVaultConfiguration -VaultName $keyVaultName -ExpectedRetentionInDays $deviceArchiveRetentionInDays
+
+$recoveryGroup = if (-not [string]::IsNullOrWhiteSpace($recoveryGroupObjectId)) {
+  Get-GroupById -GroupId $recoveryGroupObjectId
+}
+else {
+  $groups = @(Get-GroupByDisplayName -DisplayName $recoveryGroupName)
+  if ($groups.Count -ne 1) {
+    throw "Expected exactly one recovery group named '$recoveryGroupName', found $($groups.Count)."
+  }
+  $groups[0]
+}
+
+if (-not $recoveryGroup.securityEnabled -or $recoveryGroup.mailEnabled -or @($recoveryGroup.groupTypes) -contains 'DynamicMembership') {
+  throw "Recovery group '$($recoveryGroup.displayName)' must be an assigned security-only Microsoft Entra group."
+}
+Assert-KeyVaultRecoveryRoleAssignment -GroupObjectId $recoveryGroup.id -VaultName $keyVaultName
 
 $runbook = Get-AzAutomationRunbook -ResourceGroupName $resourceGroupName -AutomationAccountName $automationAccountName -Name $runbookName
 if ($runbook.State -ne 'Published') {
