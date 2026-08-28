@@ -9,6 +9,19 @@
 
 The current implementation is intentionally PowerShell-first and **does not use Azure Functions**. It deploys an Automation Account, a PowerShell 7.6 runtime environment, a scheduled runbook, and a standard-tier Key Vault for archived device secrets.
 
+> [!WARNING]
+> This template changes Microsoft Entra device state and can archive recovery material. The default is reversible disable-only behavior, but a fresh deployment can disable stale devices. Review the exclusion group, thresholds, permissions, and preflight results before enabling the schedule in production. Deletion remains opt-in.
+
+## Quickstart
+
+Use an administrator with permission to deploy Azure resources and grant the Microsoft Graph and Defender application permissions listed in [Required API application permissions](#required-api-application-permissions):
+
+```powershell
+azd init -t nathanmcnulty/azd-device-cleanup && azd up
+```
+
+After deployment, inspect the environment values and run the preflight validator. Set `deleteEnabled=true` only after a reviewed recovery drill. `azd down` removes the Azure resources after the delete lock is handled; archived Key Vault secrets and tenant device changes require separate operational cleanup.
+
 ## Default behavior
 
 By default, the solution **does disable stale devices** and **does not delete devices**.
