@@ -22,7 +22,7 @@ Install:
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)
 - PowerShell 7
 
-Use an administrator who can deploy the Azure resources, create role assignments, grant the required Microsoft Graph and Defender for Endpoint application permissions, and create or update the configured Entra groups. Review [identity and authentication](docs/identity-and-authentication.md) before production deployment.
+Use an Azure deployment operator who can deploy the resources and create Azure role assignments, and a feature operator who can create or update the configured Entra groups. Some environments already have the required Microsoft Graph permissions consented. If Graph consent has not been completed previously, the deployment may require a **Global Administrator or Privileged Role Administrator**. Defender for Endpoint follows its own consent path. Review [identity and authentication](docs/identity-and-authentication.md) for the exact permissions and role boundaries before production deployment.
 
 The hooks reuse the selected Azure CLI session and its normal operating-system broker or browser authentication. Device-code authentication is not required or supported by this deployment guidance.
 

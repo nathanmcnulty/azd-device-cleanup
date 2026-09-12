@@ -14,7 +14,7 @@ An agent can inspect prerequisites, initialize the template, explain configurati
 
 4. Set `disableEnabled=false` and `deleteEnabled=false` in `infra/main.parameters.json`.
 5. Review the exact exclusion and recovery group choice, extension-attribute slots, thresholds, notification destination, and cleanup behavior.
-6. Explicitly authorize `azd up` before the agent runs it. Complete normal browser or operating-system authentication yourself.
+6. Explicitly authorize `azd up` before the agent runs it. Have a **Global Administrator or Privileged Role Administrator** complete or pre-stage Microsoft Graph app-role consent, then complete normal browser or operating-system authentication for the deployment operator yourself.
 7. Run `scripts/preflight.ps1`, review the safe job and authoritative portal state, and add protected devices to the exclusion group.
 8. Authorize enabling device disabling separately. Do not enable deletion until a human recovery drill succeeds.
 9. Before cleanup, require the agent to resolve the exact lock, resource group, and created-versus-reused tenant objects.

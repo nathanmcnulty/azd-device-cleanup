@@ -2,7 +2,7 @@
 
 ## Administrator authority
 
-The deployment operator needs Azure resource deployment and role-assignment authority in the selected subscription, plus tenant authority to assign the workload permissions and create or update the configured Entra groups. The scripts fail when the selected Azure CLI context cannot perform those operations; they do not switch accounts or tenants automatically.
+The deployment operator needs Azure resource deployment and role-assignment authority in the selected subscription, plus feature-operation authority to create or update the configured Entra groups. A separate **Global Administrator or Privileged Role Administrator** must grant or assign the Microsoft Graph application permissions listed below. The Defender application permission follows its own Defender consent path. The scripts fail when the selected Azure CLI context cannot perform the required operation; they do not switch accounts or tenants automatically.
 
 ## Authentication flow
 
@@ -21,7 +21,7 @@ The Automation Account managed identity needs these **Microsoft Graph** app role
 - `DeviceLocalCredential.Read.All`
 - `BitlockerKey.Read.All`
 
-The identity also needs the Defender for Endpoint application permission `Machine.Read.All` when `defenderCheckInExtensionAttributeNumber` is greater than `0`. `scripts/postprovision.ps1` and `scripts/postprovision.sh` assign the required roles after infrastructure provisioning. `ThreatHunting.Read.All` is assigned only when `advancedHuntingEnabled=true`. `Machine.Read.All` is assigned when the Defender extension attribute is enabled and removed when that source is disabled.
+The identity also needs the Defender for Endpoint application permission `Machine.Read.All` when `defenderCheckInExtensionAttributeNumber` is greater than `0`. `scripts/postprovision.ps1` and `scripts/postprovision.sh` assign the required roles after infrastructure provisioning. `ThreatHunting.Read.All` is assigned only when `advancedHuntingEnabled=true`. `Machine.Read.All` is assigned when the Defender extension attribute is enabled and removed when that source is disabled. Without the required Graph app-role consent/assignment, postprovision can leave the Azure resources present but cannot complete workload setup, and the runbook's Graph-backed cleanup paths will not work at runtime.
 
 ## Access model and RBAC guidance
 
