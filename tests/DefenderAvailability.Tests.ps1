@@ -31,7 +31,7 @@ Describe 'Defender machine inventory failure safety' {
             [pscustomobject]@{
                 EnvironmentName = 'offline-test'; SubscriptionId = '00000000-0000-0000-0000-000000000001'
                 ResourceGroupName = 'rg-offline'; AutomationAccountName = 'aa-offline'; AutomationRunbookName = 'cleanup'
-                DisableAfterDays = 30; DeleteAfterDays = 90; MaxDeleteCount = 10
+                DisableAfterDays = 30; DeleteAfterDays = 90; MaxDisableCount = 10; MaxDeleteCount = 10; DisableBatchOverrideCount = $null
                 DisableEnabled = $true; DeleteEnabled = $true; ExclusionGroupId = $null
                 IntuneCheckInAttributeNumber = 0; DefenderCheckInAttributeNumber = 1
                 AdvancedHuntingEnabled = $false; AdvancedHuntingLookbackDays = 30

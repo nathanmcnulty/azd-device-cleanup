@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.42.1.51946",
-      "templateHash": "13276738046716869811"
+      "version": "0.46.1.21595",
+      "templateHash": "13690740393680042492"
     }
   },
   "parameters": {
@@ -167,12 +167,20 @@
         "description": "Default true so stale devices are disabled automatically after the configured threshold."
       }
     },
+    "maxDisableCount": {
+      "type": "int",
+      "defaultValue": 20,
+      "minValue": 1,
+      "metadata": {
+        "description": "Abort a disabling run when the number of disable candidates exceeds this limit. A manual one-off run can override only by supplying the exact observed count."
+      }
+    },
     "maxDeleteCount": {
       "type": "int",
       "defaultValue": 20,
       "minValue": 1,
       "metadata": {
-        "description": "Abort the run if more than this many stale devices are found."
+        "description": "Abort the run if more than this many delete candidates are found."
       }
     },
     "deleteEnabled": {
@@ -398,8 +406,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "16249283300644205751"
+              "version": "0.46.1.21595",
+              "templateHash": "12473696188251669568"
             }
           },
           "parameters": {
@@ -873,6 +881,10 @@
     "DEVICE_DISABLE_ENABLED": {
       "type": "string",
       "value": "[if(parameters('disableEnabled'), 'true', 'false')]"
+    },
+    "DEVICE_MAX_DISABLE_COUNT": {
+      "type": "string",
+      "value": "[string(parameters('maxDisableCount'))]"
     },
     "EXCLUSION_DEVICE_GROUP_NAME": {
       "type": "string",

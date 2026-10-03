@@ -83,6 +83,9 @@
     "maxDeleteCount": {
       "value": 20
     },
+    "maxDisableCount": {
+      "value": 20
+    },
     "retentionInDays": {
       "value": 90
     },

@@ -32,12 +32,12 @@ jobs:
             $errors += @($fileErrors)
           }
           if ($errors.Count) { throw ($errors | Out-String) }
-      - name: Test Defender availability safety
+      - name: Test device action safety
         run: |
           Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
           Import-Module Pester -RequiredVersion 5.7.1
-          $result = Invoke-Pester -Path ./tests/DefenderAvailability.Tests.ps1 -PassThru
-          if ($result.FailedCount -gt 0 -or $result.TotalCount -eq 0) { throw 'Defender availability tests failed.' }
+          $result = Invoke-Pester -Path ./tests -PassThru
+          if ($result.FailedCount -gt 0 -or $result.TotalCount -eq 0) { throw 'Device action safety tests failed.' }
       - name: Validate JSON
         run: |
           Get-ChildItem -Path . -Recurse -File -Filter *.json | ForEach-Object {

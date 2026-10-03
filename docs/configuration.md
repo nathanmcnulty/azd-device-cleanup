@@ -28,6 +28,7 @@ The default deployment wires these settings into the published runbook:
 | `deviceDisableAfterDays` | `90` | Disable threshold based on inactivity |
 | `deviceDeleteAfterDays` | `120` | Delete threshold for already-disabled devices |
 | `disableEnabled` | `true` | Default action is to disable stale devices |
+| `maxDisableCount` | `20` | Abort an enabled disable batch above 20 candidates unless a one-off run supplies the exact count |
 | `maxDeleteCount` | `20` | Safety stop for bulk deletion |
 | `deleteEnabled` | `false` | **No deletion by default** |
 | `exclusionDeviceGroupObjectId` | empty | Optional existing Microsoft Entra security group object ID for devices excluded from disable/delete |
@@ -46,6 +47,8 @@ The default deployment wires these settings into the published runbook:
 | `advancedHuntingLookbackDays` | `30` | Timespan for optional Graph advanced hunting queries; maximum 30 days |
 | `secretNamePrefix` | `device-cleanup` | Key Vault secret name prefix |
 | `retentionInDays` | `90` | Key Vault soft-delete retention |
+
+The scheduled job never supplies `DisableBatchOverrideCount`. If an authorized operator reviews an above-limit candidate batch and chooses to run it once, start a manual Automation job with `DisableBatchOverrideCount` equal to that run's exact disable candidate count. A mismatch, a stale override on a within-limit run, or a non-positive `maxDisableCount` fails before any disable/delete action. A dry run with `disableEnabled=false` can still report a larger candidate count without using an override.
 
 > [!NOTE]
 > This repository currently supplies these values directly through `infra/main.parameters.json`. Edit that file in the initialized project before `azd up` or a later `azd provision`; an arbitrary `azd env set <parameter-name>` does not override a literal value in that file.

@@ -3,7 +3,9 @@ param(
     [string] $SecretNamePrefix = '__DEVICE_SECRET_PREFIX__',
     [string] $DisableAfterDays = '__DEVICE_DISABLE_AFTER_DAYS__',
     [string] $DeleteAfterDays = '__DEVICE_DELETE_AFTER_DAYS__',
+    [string] $MaxDisableCount = '__DEVICE_MAX_DISABLE_COUNT__',
     [string] $MaxDeleteCount = '__DEVICE_MAX_DELETE_COUNT__',
+    [string] $DisableBatchOverrideCount = '',
     [string] $DisableEnabled = '__DEVICE_DISABLE_ENABLED__',
     [string] $DeleteEnabled = '__DEVICE_DELETE_ENABLED__',
     [string] $ExcludedDeviceGroupId = '__EXCLUSION_DEVICE_GROUP_ID__',
@@ -74,6 +76,26 @@ function Get-IntegerInput {
     }
 
     return $parsed
+}
+
+function Assert-DisableBatchSafety {
+    param(
+        [Parameter(Mandatory = $true)][int] $CandidateCount,
+        [Parameter(Mandatory = $true)][int] $MaxDisableCount,
+        [Parameter(Mandatory = $true)][bool] $DisableEnabled,
+        [AllowNull()][Nullable[int]] $OverrideCount
+    )
+
+    if ($MaxDisableCount -lt 1) { throw 'MaxDisableCount must be at least 1.' }
+    if ($null -ne $OverrideCount) {
+        if (-not $DisableEnabled -or $CandidateCount -le $MaxDisableCount -or $OverrideCount -ne $CandidateCount) {
+            throw 'DisableBatchOverrideCount must equal the above-limit disable candidate count for this one run.'
+        }
+        return
+    }
+    if ($DisableEnabled -and $CandidateCount -gt $MaxDisableCount) {
+        throw "Safety threshold reached. Found $CandidateCount disable candidates which exceeds the configured maximum of $MaxDisableCount. A one-off run requires -DisableBatchOverrideCount $CandidateCount."
+    }
 }
 
 function Get-ExtensionAttributeNumberInput {
@@ -1364,6 +1386,8 @@ function Get-DeviceCleanupSettings {
     $resolvedResourceGroupName = Get-OptionalConfiguredInput -Value $ResourceGroupName
     $resolvedAutomationAccountName = Get-OptionalConfiguredInput -Value $AutomationAccountName
     $resolvedAutomationRunbookName = Get-OptionalConfiguredInput -Value $AutomationRunbookName
+    $overrideInput = Get-OptionalConfiguredInput -Value $DisableBatchOverrideCount
+    $resolvedDisableOverride = if ($null -eq $overrideInput) { $null } else { Get-IntegerInput -Name 'DisableBatchOverrideCount' -Value $overrideInput }
 
     return [ordered]@{
         VaultName = $resolvedKeyVaultName
@@ -1371,7 +1395,9 @@ function Get-DeviceCleanupSettings {
         ExclusionGroupId = $resolvedExcludedDeviceGroupId
         DisableAfterDays = $resolvedDisableAfterDays
         DeleteAfterDays = $resolvedDeleteAfterDays
+        MaxDisableCount = Get-IntegerInput -Name 'MaxDisableCount' -Value $MaxDisableCount
         MaxDeleteCount = Get-IntegerInput -Name 'MaxDeleteCount' -Value $MaxDeleteCount
+        DisableBatchOverrideCount = $resolvedDisableOverride
         DisableEnabled = Get-BooleanInput -Name 'DisableEnabled' -Value $DisableEnabled
         DeleteEnabled = Get-BooleanInput -Name 'DeleteEnabled' -Value $DeleteEnabled
         IntuneCheckInAttributeNumber = $resolvedIntuneAttributeNumber
@@ -1720,7 +1746,9 @@ function Invoke-DeviceCleanupJob {
             deleteEnabled = $settings.DeleteEnabled
             disableAfterDays = $settings.DisableAfterDays
             deleteAfterDays = $settings.DeleteAfterDays
+            maxDisableCount = $settings.MaxDisableCount
             maxDeleteCount = $settings.MaxDeleteCount
+            disableBatchOverrideCount = $settings.DisableBatchOverrideCount
             exclusionGroupId = $settings.ExclusionGroupId
             intuneCheckInAttributeNumber = $settings.IntuneCheckInAttributeNumber
             defenderCheckInAttributeNumber = $settings.DefenderCheckInAttributeNumber
@@ -1761,11 +1789,13 @@ function Invoke-DeviceCleanupJob {
     }
 
     try {
-        Write-Output "Starting device cleanup run. CleanupRunId=$cleanupRunId; DisableEnabled=$($settings.DisableEnabled); DeleteEnabled=$($settings.DeleteEnabled); ExclusionGroupId=$($settings.ExclusionGroupId); DisableAfterDays=$($settings.DisableAfterDays); DeleteAfterDays=$($settings.DeleteAfterDays); MaxDeleteCount=$($settings.MaxDeleteCount); IntuneAttribute=$($settings.IntuneCheckInAttributeNumber); DefenderAttribute=$($settings.DefenderCheckInAttributeNumber); AdvancedHuntingEnabled=$($settings.AdvancedHuntingEnabled); AdvancedHuntingLookbackDays=$($settings.AdvancedHuntingLookbackDays); DisableCutoff=$($disableCutoffDate.ToString('o')); DeleteCutoff=$($deleteCutoffDate.ToString('o'))"
+        Write-Output "Starting device cleanup run. CleanupRunId=$cleanupRunId; DisableEnabled=$($settings.DisableEnabled); DeleteEnabled=$($settings.DeleteEnabled); ExclusionGroupId=$($settings.ExclusionGroupId); DisableAfterDays=$($settings.DisableAfterDays); DeleteAfterDays=$($settings.DeleteAfterDays); MaxDisableCount=$($settings.MaxDisableCount); MaxDeleteCount=$($settings.MaxDeleteCount); IntuneAttribute=$($settings.IntuneCheckInAttributeNumber); DefenderAttribute=$($settings.DefenderCheckInAttributeNumber); AdvancedHuntingEnabled=$($settings.AdvancedHuntingEnabled); AdvancedHuntingLookbackDays=$($settings.AdvancedHuntingLookbackDays); DisableCutoff=$($disableCutoffDate.ToString('o')); DeleteCutoff=$($deleteCutoffDate.ToString('o'))"
 
         $devices = @(Get-EntraDevices | Sort-Object -Property displayName, id)
         $summary.counts.totalDevices = $devices.Count
         if ($devices.Count -eq 0) {
+            Assert-DisableBatchSafety -CandidateCount 0 -MaxDisableCount $settings.MaxDisableCount `
+                -DisableEnabled $settings.DisableEnabled -OverrideCount $settings.DisableBatchOverrideCount
             Write-Output 'No Entra devices were returned.'
             $summary.status = 'NoAction'
             $summary.summaryText = 'No Entra devices were returned.'
@@ -1826,6 +1856,8 @@ function Invoke-DeviceCleanupJob {
         }
 
         if (($settings.DefenderCheckInAttributeNumber -gt 0) -and (-not $defenderApiAvailable) -and ((-not $settings.AdvancedHuntingEnabled) -or (-not $advancedHuntingAvailable))) {
+            Assert-DisableBatchSafety -CandidateCount 0 -MaxDisableCount $settings.MaxDisableCount `
+                -DisableEnabled $settings.DisableEnabled -OverrideCount $settings.DisableBatchOverrideCount
             Write-Warning 'Neither the Defender machines API nor the configured advanced hunting fallback was available. Skipping disable/delete actions for this run.'
             $summary.status = 'NoAction'
             $summary.severity = 'Warning'
@@ -1875,6 +1907,17 @@ function Invoke-DeviceCleanupJob {
             Write-Output "Excluded $excludedLifecycleDeviceCount device(s) from disable/delete evaluation via group '$($settings.ExclusionGroupId)'."
         }
 
+        $disableCandidates = @($candidates | Where-Object Action -eq 'Disable' | Sort-Object -Property InactiveDays, @{ Expression = { $_.Device.displayName } }, @{ Expression = { $_.Device.id } })
+        $deleteCandidates = @($candidates | Where-Object Action -eq 'Delete' | Sort-Object -Property InactiveDays, @{ Expression = { $_.Device.displayName } }, @{ Expression = { $_.Device.id } })
+        $summary.counts.disableCandidates = $disableCandidates.Count
+        $summary.counts.deleteCandidates = $deleteCandidates.Count
+
+        Assert-DisableBatchSafety -CandidateCount $disableCandidates.Count -MaxDisableCount $settings.MaxDisableCount `
+            -DisableEnabled $settings.DisableEnabled -OverrideCount $settings.DisableBatchOverrideCount
+        if ($deleteCandidates.Count -gt $settings.MaxDeleteCount) {
+            throw "Safety threshold reached. Found $($deleteCandidates.Count) delete candidates which exceeds the configured maximum of $($settings.MaxDeleteCount)."
+        }
+
         if ($candidates.Count -eq 0) {
             Write-Output 'No Entra devices require disable or delete actions.'
             $summary.status = 'NoAction'
@@ -1882,15 +1925,6 @@ function Invoke-DeviceCleanupJob {
             $summary.finishedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
             Invoke-DeviceCleanupNotification -Settings $settings -Summary ([pscustomobject] $summary)
             return [pscustomobject] $summary
-        }
-
-        $disableCandidates = @($candidates | Where-Object Action -eq 'Disable' | Sort-Object -Property InactiveDays, @{ Expression = { $_.Device.displayName } }, @{ Expression = { $_.Device.id } })
-        $deleteCandidates = @($candidates | Where-Object Action -eq 'Delete' | Sort-Object -Property InactiveDays, @{ Expression = { $_.Device.displayName } }, @{ Expression = { $_.Device.id } })
-        $summary.counts.disableCandidates = $disableCandidates.Count
-        $summary.counts.deleteCandidates = $deleteCandidates.Count
-
-        if ($deleteCandidates.Count -gt $settings.MaxDeleteCount) {
-            throw "Safety threshold reached. Found $($deleteCandidates.Count) delete candidates which exceeds the configured maximum of $($settings.MaxDeleteCount)."
         }
 
         Write-Output "Found $($disableCandidates.Count) disable candidate(s) and $($deleteCandidates.Count) delete candidate(s)."
