@@ -80,7 +80,11 @@ param deviceDeleteAfterDays int = 120
 param disableEnabled bool = true
 
 @minValue(1)
-@description('Abort the run if more than this many stale devices are found.')
+@description('Abort a disabling run when the number of disable candidates exceeds this limit. A manual one-off run can override only by supplying the exact observed count.')
+param maxDisableCount int = 20
+
+@minValue(1)
+@description('Abort the run if more than this many delete candidates are found.')
 param maxDeleteCount int = 20
 
 @description('Safe default. Devices are never deleted until you explicitly set this to true.')
@@ -208,6 +212,7 @@ output DEVICE_DELETE_AFTER_DAYS string = string(deviceDeleteAfterDays)
 output DEVICE_DELETE_ENABLED string = deleteEnabled ? 'true' : 'false'
 output DEVICE_DISABLE_AFTER_DAYS string = string(deviceDisableAfterDays)
 output DEVICE_DISABLE_ENABLED string = disableEnabled ? 'true' : 'false'
+output DEVICE_MAX_DISABLE_COUNT string = string(maxDisableCount)
 output EXCLUSION_DEVICE_GROUP_NAME string = exclusionDeviceGroupName
 output EXCLUSION_DEVICE_GROUP_OBJECT_ID string = exclusionDeviceGroupObjectId
 output RECOVERY_GROUP_NAME string = recoveryGroupName
