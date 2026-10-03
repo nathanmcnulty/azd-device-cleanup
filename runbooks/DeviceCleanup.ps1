@@ -332,17 +332,7 @@ function Get-DefenderMachines {
 
     while ($true) {
         $uri = "$($script:DefenderApiUrl)/api/machines?`$top=$pageSize&`$skip=$skip"
-        try {
-            $response = Invoke-JsonRestMethod -Method 'GET' -Uri $uri -AccessToken $token
-        }
-        catch {
-            $statusCode = Get-HttpStatusCode -ErrorRecord $_
-            if (($statusCode -eq 404) -and ($skip -eq 0)) {
-                return @()
-            }
-
-            throw
-        }
+        $response = Invoke-JsonRestMethod -Method 'GET' -Uri $uri -AccessToken $token
 
         $batch = @($response.value)
         if ($batch.Count -eq 0) {
