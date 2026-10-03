@@ -1,0 +1,200 @@
+{
+  "schemaVersion": "1.0",
+  "solutionId": "azd-device-cleanup",
+  "status": "implemented",
+  "coverage": "partial",
+  "reviewedOn": "2026-10-02",
+  "requirements": [
+    {
+      "resource": "https://graph.microsoft.com",
+      "kind": "application",
+      "permission": "Device.Read.All",
+      "principal": "automation-identity",
+      "phase": "runtime",
+      "feature": "core",
+      "defaultEnabled": true,
+      "scope": "tenant",
+      "rationale": "Required by the recorded project capability.",
+      "evidenceState": "documented",
+      "evidence": [
+        {
+          "path": "docs/identity-and-authentication.md",
+          "sha256": "4dc4005f658002acb3710d39ecd1594dea3f815874ead8bf555333cb5820eae1"
+        }
+      ]
+    },
+    {
+      "resource": "https://graph.microsoft.com",
+      "kind": "application",
+      "permission": "Device.ReadWrite.All",
+      "principal": "automation-identity",
+      "phase": "runtime",
+      "feature": "core",
+      "defaultEnabled": true,
+      "scope": "tenant",
+      "rationale": "Required by the recorded project capability.",
+      "evidenceState": "documented",
+      "evidence": [
+        {
+          "path": "docs/identity-and-authentication.md",
+          "sha256": "4dc4005f658002acb3710d39ecd1594dea3f815874ead8bf555333cb5820eae1"
+        }
+      ]
+    },
+    {
+      "resource": "https://graph.microsoft.com",
+      "kind": "application",
+      "permission": "Group.Read.All",
+      "principal": "automation-identity",
+      "phase": "runtime",
+      "feature": "core",
+      "defaultEnabled": true,
+      "scope": "tenant",
+      "rationale": "Required by the recorded project capability.",
+      "evidenceState": "documented",
+      "evidence": [
+        {
+          "path": "docs/identity-and-authentication.md",
+          "sha256": "4dc4005f658002acb3710d39ecd1594dea3f815874ead8bf555333cb5820eae1"
+        }
+      ]
+    },
+    {
+      "resource": "https://graph.microsoft.com",
+      "kind": "application",
+      "permission": "GroupMember.Read.All",
+      "principal": "automation-identity",
+      "phase": "runtime",
+      "feature": "core",
+      "defaultEnabled": true,
+      "scope": "tenant",
+      "rationale": "Required by the recorded project capability.",
+      "evidenceState": "documented",
+      "evidence": [
+        {
+          "path": "docs/identity-and-authentication.md",
+          "sha256": "4dc4005f658002acb3710d39ecd1594dea3f815874ead8bf555333cb5820eae1"
+        }
+      ]
+    },
+    {
+      "resource": "https://graph.microsoft.com",
+      "kind": "application",
+      "permission": "DeviceManagementManagedDevices.Read.All",
+      "principal": "automation-identity",
+      "phase": "runtime",
+      "feature": "core",
+      "defaultEnabled": true,
+      "scope": "tenant",
+      "rationale": "Required by the recorded project capability.",
+      "evidenceState": "documented",
+      "evidence": [
+        {
+          "path": "docs/identity-and-authentication.md",
+          "sha256": "4dc4005f658002acb3710d39ecd1594dea3f815874ead8bf555333cb5820eae1"
+        }
+      ]
+    },
+    {
+      "resource": "https://graph.microsoft.com",
+      "kind": "application",
+      "permission": "DeviceLocalCredential.Read.All",
+      "principal": "automation-identity",
+      "phase": "runtime",
+      "feature": "core",
+      "defaultEnabled": true,
+      "scope": "tenant",
+      "rationale": "Required by the recorded project capability.",
+      "evidenceState": "documented",
+      "evidence": [
+        {
+          "path": "docs/identity-and-authentication.md",
+          "sha256": "4dc4005f658002acb3710d39ecd1594dea3f815874ead8bf555333cb5820eae1"
+        }
+      ]
+    },
+    {
+      "resource": "https://graph.microsoft.com",
+      "kind": "application",
+      "permission": "BitlockerKey.Read.All",
+      "principal": "automation-identity",
+      "phase": "runtime",
+      "feature": "core",
+      "defaultEnabled": true,
+      "scope": "tenant",
+      "rationale": "Required by the recorded project capability.",
+      "evidenceState": "documented",
+      "evidence": [
+        {
+          "path": "docs/identity-and-authentication.md",
+          "sha256": "4dc4005f658002acb3710d39ecd1594dea3f815874ead8bf555333cb5820eae1"
+        }
+      ]
+    },
+    {
+      "resource": "https://graph.microsoft.com",
+      "kind": "application",
+      "permission": "ThreatHunting.Read.All",
+      "principal": "automation-identity",
+      "phase": "runtime",
+      "feature": "advanced-hunting",
+      "defaultEnabled": true,
+      "scope": "tenant",
+      "rationale": "Required by the recorded project capability. The checked-in Bicep default enables this feature.",
+      "evidenceState": "documented",
+      "evidence": [
+        {
+          "path": "docs/identity-and-authentication.md",
+          "sha256": "4dc4005f658002acb3710d39ecd1594dea3f815874ead8bf555333cb5820eae1"
+        },
+        {
+          "path": "infra/main.bicep",
+          "sha256": "399cc476b73ba2a5f2c71d9b2b2e4bed01b9fcc9ff0e4b325f99a6ae6f96e66c"
+        }
+      ]
+    },
+    {
+      "resource": "https://api.securitycenter.microsoft.com",
+      "kind": "application",
+      "permission": "Machine.Read.All",
+      "principal": "automation-identity",
+      "phase": "runtime",
+      "feature": "defender-check-in",
+      "defaultEnabled": true,
+      "scope": "tenant",
+      "rationale": "Required by the recorded project capability. The checked-in Bicep default enables this feature.",
+      "evidenceState": "documented",
+      "evidence": [
+        {
+          "path": "docs/identity-and-authentication.md",
+          "sha256": "4dc4005f658002acb3710d39ecd1594dea3f815874ead8bf555333cb5820eae1"
+        },
+        {
+          "path": "infra/main.bicep",
+          "sha256": "399cc476b73ba2a5f2c71d9b2b2e4bed01b9fcc9ff0e4b325f99a6ae6f96e66c"
+        }
+      ]
+    },
+    {
+      "resource": "azure",
+      "kind": "azure-rbac",
+      "permission": "Key Vault Secrets User",
+      "principal": "recovery-group",
+      "phase": "runtime",
+      "feature": "recovery",
+      "defaultEnabled": true,
+      "scope": "deployed-archive-vault",
+      "rationale": "Human recovery access is separated from automation archive writes.",
+      "evidenceState": "documented",
+      "evidence": [
+        {
+          "path": "docs/identity-and-authentication.md",
+          "sha256": "4dc4005f658002acb3710d39ecd1594dea3f815874ead8bf555333cb5820eae1"
+        }
+      ]
+    }
+  ],
+  "gaps": [
+    "Azure RBAC scopes, operator/consent roles, cleanup, and optional connector permissions still need a full review."
+  ]
+}
