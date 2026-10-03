@@ -1,5 +1,9 @@
 # Post-v1 follow-up
 
+> Task tracking moved to [the standardized backlog](docs/backlog.md) and its
+> [canonical JSON](docs/backlog.json). All six follow-ups below are represented
+> there. Keep this list as historical context; update status in the backlog.
+
 - [ ] Add optional Intune cleanup after successful archive + Entra delete.
 - [ ] Add optional Defender for Endpoint cleanup after successful archive + Entra delete.
 - [ ] Add more dynamic groups, such as `NotOnboarded` and `Unmanaged`, in addition to the stale groups.
