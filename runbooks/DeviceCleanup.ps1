@@ -1579,6 +1579,7 @@ function Sync-DeviceCheckInAttributes {
     if (($Settings.IntuneCheckInAttributeNumber -le 0) -and ($Settings.DefenderCheckInAttributeNumber -le 0)) {
         return [pscustomobject]@{
             UpdatedCount = 0
+            RestrictedManagementUnitSkippedCount = 0
             DeviceCount = $Devices.Count
         }
     }
@@ -1972,6 +1973,7 @@ function Invoke-DeviceCleanupJob {
                 $plannedSecretName = New-ArchiveSecretName -Prefix $settings.SecretPrefix -DisplayName $displayName -EntraObjectId $device.id
                 Write-Output "Dry run: would archive and delete '$displayName' ($($device.id)) after $($candidate.InactiveDays) inactive day(s) using secret '$plannedSecretName'. EffectiveHeartbeat=$($candidate.HeartbeatSource)@$($candidate.HeartbeatTimestamp)"
                 $dryRunRecord = New-DeviceCleanupActionRecord -Device $device -Candidate $candidate -Mode 'DryRun' -ArchiveResult ([pscustomobject]@{
+                        CleanupRunId = $null
                         SecretName = $plannedSecretName
                         LapsCredentialCount = 0
                         BitLockerKeyCount = 0
