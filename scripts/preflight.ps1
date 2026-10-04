@@ -6,6 +6,28 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+function Start-PreflightAutomationJob {
+  param(
+    [Parameter(Mandatory = $true)] [string] $ResourceGroupName,
+    [Parameter(Mandatory = $true)] [string] $AutomationAccountName,
+    [Parameter(Mandatory = $true)] [string] $RunbookName,
+    [bool] $AdvancedHuntingEnabled,
+    [bool] $LogicAppNotificationsEnabled
+  )
+
+  # Zero slots suppress extension-attribute PATCHes while preserving the
+  # deployed schedule's configured enrichment settings.
+  $jobParameters = @{
+    DisableEnabled = 'false'
+    DeleteEnabled = 'false'
+    IntuneCheckInAttributeNumber = '0'
+    DefenderCheckInAttributeNumber = '0'
+    AdvancedHuntingEnabled = if ($AdvancedHuntingEnabled) { 'true' } else { 'false' }
+    NotifyOnNoAction = if ($LogicAppNotificationsEnabled) { 'true' } else { 'false' }
+  }
+  Start-AzAutomationRunbook -ResourceGroupName $ResourceGroupName -AutomationAccountName $AutomationAccountName -Name $RunbookName -Parameters $jobParameters
+}
+
 function Ensure-AzureCli {
   if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
     throw 'Azure CLI is required to run preflight validation.'
@@ -643,12 +665,7 @@ Write-Host "Preflight checks passed for permissions, Key Vault RBAC/configuratio
 
 if (-not $SkipAutomationJob) {
   $automationValidationStartedAtUtc = (Get-Date).ToUniversalTime()
-  $job = Start-AzAutomationRunbook -ResourceGroupName $resourceGroupName -AutomationAccountName $automationAccountName -Name $runbookName -Parameters @{
-    DisableEnabled = 'false'
-    DeleteEnabled = 'false'
-    AdvancedHuntingEnabled = if ($advancedHuntingEnabled) { 'true' } else { 'false' }
-    NotifyOnNoAction = if ($logicAppNotificationsEnabled) { 'true' } else { 'false' }
-  }
+  $job = Start-PreflightAutomationJob -ResourceGroupName $resourceGroupName -AutomationAccountName $automationAccountName -RunbookName $runbookName -AdvancedHuntingEnabled $advancedHuntingEnabled -LogicAppNotificationsEnabled $logicAppNotificationsEnabled
 
   $deadline = (Get-Date).ToUniversalTime().AddMinutes($AutomationJobTimeoutMinutes)
   do {

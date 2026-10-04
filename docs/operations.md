@@ -8,7 +8,7 @@ Run the supported validator after every deployment or material configuration cha
 .\scripts\preflight.ps1
 ```
 
-Use `-SkipAutomationJob` only when you deliberately cannot run the safe job. The default validation job overrides both actions to false, so it can verify discovery, enrichment, exclusions, permissions, archive infrastructure, and notification wiring without disabling or deleting a device.
+Use `-SkipAutomationJob` when you need a checks-only preflight. The default validation job overrides both lifecycle actions to false and both check-in extension-attribute slots to `0`. It verifies device discovery, exclusions, action planning, permissions, archive infrastructure, and notification wiring without changing device attributes or disabling or deleting a device. When notifications are enabled, this job sends a validation summary to the Logic App and any configured downstream webhook. Attribute enrichment requires separate validation with an explicitly selected device scope.
 
 ## Deploy and update
 
