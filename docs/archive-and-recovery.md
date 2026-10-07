@@ -111,20 +111,26 @@ Each archived device is stored as a JSON secret like:
 
 ## Archive retrieval
 
-Use `scripts\Get-ArchivedDevice.ps1` to find archived devices and inspect recovery material.
+Use `scripts\Get-ArchivedDevice.ps1` to find archived devices. Retrieval is
+metadata-only by default, including when exactly one record matches; the
+default path never reads the Key Vault secret value.
 
 Examples:
 
 ```powershell
 .\scripts\Get-ArchivedDevice.ps1 -DisplayName "PL-CL02"
 .\scripts\Get-ArchivedDevice.ps1 -DeviceId "<device-guid>"
-.\\scripts\\Get-ArchivedDevice.ps1 -SerialNumber "<serial-number>"
-.\\scripts\\Get-ArchivedDevice.ps1 -IntuneManagedDeviceId "<managed-device-guid>"
-.\\scripts\\Get-ArchivedDevice.ps1 -DefenderMachineId "<defender-machine-id>"
+.\scripts\Get-ArchivedDevice.ps1 -SerialNumber "<serial-number>"
+.\scripts\Get-ArchivedDevice.ps1 -IntuneManagedDeviceId "<managed-device-guid>"
+.\scripts\Get-ArchivedDevice.ps1 -DefenderMachineId "<defender-machine-id>"
 .\scripts\Get-ArchivedDevice.ps1 -EntraObjectId "<object-guid>" -ShowRecoveryMaterial
 ```
 
-The script defaults to summary output so recovery data is not printed accidentally. Add `-ShowRecoveryMaterial` only when you need the LAPS password or BitLocker keys on screen.
+Add `-ShowRecoveryMaterial` only when you need the LAPS password or BitLocker
+keys on screen. That switch is explicit recovery authorization for one
+unambiguous record. If a search matches multiple records, the script fails
+before reading any secret value; narrow the search first. Duplicate hostnames
+remain separate records and are never treated as a unique identity.
 
 Each archived secret now carries searchable metadata in both the JSON payload and Key Vault tags, including:
 
@@ -133,6 +139,11 @@ Each archived secret now carries searchable metadata in both the JSON payload an
 - Defender for Endpoint machine ID when available
 - per-source last-seen timestamps
 - `cleanupRunId` plus the effective heartbeat source and timestamp that drove the delete decision
+
+The archive reader supports the recorded metadata keys and bounded selectors.
+Primary-user lookup is not indexed or supported by this workflow; CLEAN-006
+remains proposed for any future index expansion. Missing optional tags are
+reported as empty metadata and a selector whose tag is absent does not match.
 
 ## Recovery drill and SOP
 

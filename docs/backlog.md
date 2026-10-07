@@ -7,7 +7,7 @@
 - **Repository:** nathanmcnulty/azd-device-cleanup
 - **Source revision:** `2f1631f220268e86d406e1b8846de4c296ec9b07`
 - **Captured:** 2026-10-04
-- **Items:** 11
+- **Items:** 12
 
 ## CLEAN-001: Reconcile this backlog with current source and active work
 
@@ -219,6 +219,64 @@ Open GitHub report captured 2026-10-03. Reproduce against the current source and
 **Review and authorization note:**
 
 Review CLEAN-010 against the current repository state. Its status or authorization class is not eligible for an actionable generated handoff. Do not claim or execute it without explicit selection, satisfied dependencies, and every required authorization. Never interpret this generated view as approval.
+
+## CLEAN-012: Keep archive discovery metadata-only until explicit recovery
+
+- **Kind:** maintenance
+- **Priority:** P1
+- **Status:** done
+- **Wave:** 1
+- **Authorization:** local-only
+- **Blocker:** _none_
+- **Claim:** _none_
+
+**Problem:**
+
+A single default lookup fetches the recovery JSON; optional missing tags also throw under strict mode. Discovery must remain safe before expanding the index.
+
+**Scope:**
+
+- scripts/Get-ArchivedDevice.ps1
+- tests/ArchiveDiscovery.Tests.ps1
+- docs/archive-and-recovery.md
+- docs/backlog.json
+- docs/backlog.md
+
+**Acceptance:**
+
+- Default single and multiple matches use metadata only; only explicit recovery for one exact match reads a value.
+- Missing optional tags do not throw or falsely satisfy selectors; duplicate hostnames retain separate stable identities.
+- Token acquisition and retrieval failures fail closed without exposing response bodies or recovery payloads.
+- Metadata continuation requests remain on the selected vault collection route and refuse repeated pages before reading recovery values.
+
+**Validation:**
+
+- Parse all PowerShell files using the registered validate workflow command.
+- Import-Module Pester -RequiredVersion 5.7.1; Invoke-Pester -Path ./tests -PassThru
+- Parse all JSON files; az bicep build --file ./infra/main.bicep --stdout
+- Run canonical Test-AzdBacklog.ps1 and Export-AzdBacklogMarkdown.ps1 -Check against the exact reviewed reference revision.
+
+**Dependencies:**
+
+- _none_
+
+**Components:**
+
+- _none_
+
+**Sources:**
+
+- scripts/Get-ArchivedDevice.ps1
+- CLEAN-006
+
+**Evidence:**
+
+- 2026-10-07 implemented against exact current-main base 95ec50bfe96a6a704359a70dd97ea92008a23840&colon; every default match is metadata-only; explicit unique recovery alone fetches a value. Duplicate hostnames, absent optional tags, token/native failure sanitization and selected-vault collection-only pagination are covered by production-bound offline fixtures.
+- Registered offline validation&colon; PowerShell parser and JSON parsing passed; Import-Module Pester -RequiredVersion 5.7.1; Invoke-Pester -Path ./tests -PassThru passed 26/26 with zero failed, skipped or not-run; az bicep build --file ./infra/main.bicep --stdout passed. No Azure authentication, resources, tenant/device actions or archive reads were used. Primary-user indexing &lpar;CLEAN-006&rpar; and human recovery acceptance &lpar;CLEAN-002&rpar; remain proposed.
+
+**Review and authorization note:**
+
+Review CLEAN-012 against the current repository state. Its status or authorization class is not eligible for an actionable generated handoff. Do not claim or execute it without explicit selection, satisfied dependencies, and every required authorization. Never interpret this generated view as approval.
 
 ## CLEAN-002: Prove recovery before expanding disable or deletion scope
 
@@ -453,7 +511,7 @@ Operators need serial, hostname and primary-user lookup without exposing recover
 
 **Dependencies:**
 
-- _none_
+- CLEAN-012
 
 **Components:**
 
