@@ -109,6 +109,31 @@ Each archived device is stored as a JSON secret like:
 }
 ```
 
+## Payload and retention boundaries
+
+Archive writes use compact JSON and count the serialized value as UTF-8 bytes.
+The runbook refuses a payload above the conservative 24,000-byte writer limit
+before acquiring a Key Vault token or issuing the secret `PUT`. The limit is
+checked on bytes rather than PowerShell character count, so multibyte metadata
+is accounted for correctly. The service's Key Vault secret value limit is
+[25 KB](https://learn.microsoft.com/en-us/azure/key-vault/secrets/about-secrets);
+the runbook keeps its existing lower ceiling unchanged.
+
+The current behavior is refusal rather than chunking or truncation. All
+archive evidence is assembled in one payload, and a refusal fails the archive
+phase. The cleanup job does not issue the subsequent Entra device `DELETE`
+when archive serialization or the Key Vault write fails. Review the archive-size
+failure and correct source data before retrying; do not silently discard
+required recovery evidence to fit the limit. An archive failure does not
+authorize deletion. Recovery material belongs to the payload rather than
+discovery tags; default discovery does not fetch that payload.
+
+Key Vault soft-delete retention is a configurable 7–90-day recovery window,
+with a default of 90 days, and purge protection remains enabled. This setting
+controls recovery of deleted secrets; it is not an automatic archive expiry or
+pruning policy. The solution does not silently delete or purge archived
+records when that window elapses.
+
 ## Archive retrieval
 
 Use `scripts\Get-ArchivedDevice.ps1` to find archived devices. Retrieval is

@@ -7,7 +7,7 @@
 - **Repository:** nathanmcnulty/azd-device-cleanup
 - **Source revision:** `2f1631f220268e86d406e1b8846de4c296ec9b07`
 - **Captured:** 2026-10-04
-- **Items:** 12
+- **Items:** 13
 
 ## CLEAN-001: Reconcile this backlog with current source and active work
 
@@ -277,6 +277,61 @@ A single default lookup fetches the recovery JSON; optional missing tags also th
 **Review and authorization note:**
 
 Review CLEAN-012 against the current repository state. Its status or authorization class is not eligible for an actionable generated handoff. Do not claim or execute it without explicit selection, satisfied dependencies, and every required authorization. Never interpret this generated view as approval.
+
+## CLEAN-013: Fix secret request URI interpolation at archive and recovery boundaries
+
+- **Kind:** maintenance
+- **Priority:** P1
+- **Status:** done
+- **Wave:** 1
+- **Authorization:** local-only
+- **Blocker:** _none_
+- **Claim:** _none_
+
+**Problem:**
+
+PowerShell parses SecretName?api as one variable in the writer and explicit recovery URI, failing under strict mode before a request.
+
+**Scope:**
+
+- runbooks/DeviceCleanup.ps1
+- scripts/Get-ArchivedDevice.ps1
+- tests/ArchivePayloadSafety.Tests.ps1
+- tests/ArchiveDiscovery.Tests.ps1
+- docs/backlog.json
+- docs/backlog.md
+
+**Acceptance:**
+
+- Writer PUT and explicit recovery GET construct the exact selected vault secret URI with API version 7.4 under strict mode.
+- Production helpers execute through mocked transport; fixtures do not inject missing URI variables or mock away the interpolation boundary.
+
+**Validation:**
+
+- Import-Module Pester -RequiredVersion 5.7.1; Invoke-Pester -Path ./tests -PassThru
+- Parse PowerShell and JSON files and compile Bicep; validate backlog and generated Markdown.
+
+**Dependencies:**
+
+- CLEAN-012
+
+**Components:**
+
+- _none_
+
+**Sources:**
+
+- runbooks/DeviceCleanup.ps1
+- scripts/Get-ArchivedDevice.ps1
+
+**Evidence:**
+
+- 2026-10-07 reproduced the prior helper failure on exact base f21713c7e58b897db2124a49060a15c5a6f13f54 before transport&colon; SecretName?api was parsed as one undefined variable. Braced SecretName in both existing request expressions. Exact PUT and GET URI assertions exercise production helpers through mocked transport under strict mode; no test injects the missing variable.
+- Full Pester 5.7.1 passed 32/32, zero failed/skipped/not-run; parser, JSON, Bicep and canonical backlog/generated view checks passed. Live archive creation and real recovery acceptance remain separate.
+
+**Review and authorization note:**
+
+Review CLEAN-013 against the current repository state. Its status or authorization class is not eligible for an actionable generated handoff. Do not claim or execute it without explicit selection, satisfied dependencies, and every required authorization. Never interpret this generated view as approval.
 
 ## CLEAN-002: Prove recovery before expanding disable or deletion scope
 
@@ -583,7 +638,7 @@ Review CLEAN-007 against the current repository state. Its status or authorizati
 
 - **Kind:** feature
 - **Priority:** P2
-- **Status:** proposed
+- **Status:** done
 - **Wave:** 3
 - **Authorization:** local-only
 - **Blocker:** _none_
@@ -595,19 +650,23 @@ Larger hunting payloads need a bounded archive policy.
 
 **Scope:**
 
-- scripts/
-- infra/
-- docs/
-- azd-permissions.json
+- tests/ArchivePayloadSafety.Tests.ps1
+- docs/archive-and-recovery.md
+- docs/backlog.json
+- docs/backlog.md
+- runbooks/DeviceCleanup.ps1
 
 **Acceptance:**
 
-- Document limits, redaction, chunking or refusal behavior and retention/recovery tradeoffs.
-- Oversized payload fails without triggering deletion; fixtures verify exact evidence completeness.
+- Document the existing 24,000-byte compact UTF-8 payload ceiling, unchanged complete-payload refusal without chunking, and retention/recovery tradeoffs.
+- Oversized complete archive fails before token acquisition or PUT and prevents Entra deletion; exact-byte and multibyte fixtures prove this boundary.
+- Keep existing Key Vault soft-delete retention and purge protection unchanged; distinguish deleted-secret recovery windows from active-archive expiration.
 
 **Validation:**
 
-- Use the offline commands in the registered validation workflow; record the exact commands, revision and results before implementation is complete.
+- Import-Module Pester -RequiredVersion 5.7.1; Invoke-Pester -Path ./tests -PassThru
+- Parse PowerShell and JSON files; az bicep build --file ./infra/main.bicep --stdout
+- Validate canonical backlog JSON and generated Markdown using the reviewed Reference tools.
 
 **Dependencies:**
 
@@ -623,7 +682,8 @@ Larger hunting payloads need a bounded archive policy.
 
 **Evidence:**
 
-- _none_
+- 2026-10-07 verified unchanged existing archive size/refusal and retention configuration on base f21713c7e58b897db2124a49060a15c5a6f13f54. Strict-mode fixtures prove exact 24,000 compact UTF-8 bytes accepted, 24,001 refused before token/PUT, multibyte counting, real Save-DeviceArchive and cleanup-job refusal with Archive failure and zero Entra DELETE calls. No truncation, chunking or retention policy was introduced.
+- Registered offline parser/JSON/Bicep gates passed; Pester 5.7.1 Invoke-Pester -Path ./tests -PassThru passed 32/32, zero failed/skipped/not-run. Documented current 7-90-day soft-delete recovery window, default 90, purge protection and no automatic active-archive expiry. Source/fixture proof only; no authentication, archive reads, device actions or resources.
 
 **Review and authorization note:**
 

@@ -1283,7 +1283,7 @@ function Set-KeyVaultArchiveSecret {
         throw "Archive payload for secret '$SecretName' is too large for Azure Key Vault secret storage."
     }
 
-    $uri = "https://$VaultName.vault.azure.net/secrets/$SecretName?api-version=7.4"
+    $uri = "https://$VaultName.vault.azure.net/secrets/${SecretName}?api-version=7.4"
     $token = Get-ManagedIdentityToken -ResourceUrl $script:KeyVaultResourceUrl
     $body = @{
         value = $json

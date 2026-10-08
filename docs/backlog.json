@@ -232,21 +232,25 @@
       "title": "Define archive payload-size and retention limits",
       "kind": "feature",
       "priority": "P2",
-      "status": "proposed",
+      "status": "done",
       "wave": 3,
       "problem": "Larger hunting payloads need a bounded archive policy.",
       "scope": [
-        "scripts/",
-        "infra/",
-        "docs/",
-        "azd-permissions.json"
+        "tests/ArchivePayloadSafety.Tests.ps1",
+        "docs/archive-and-recovery.md",
+        "docs/backlog.json",
+        "docs/backlog.md",
+        "runbooks/DeviceCleanup.ps1"
       ],
       "acceptance": [
-        "Document limits, redaction, chunking or refusal behavior and retention/recovery tradeoffs.",
-        "Oversized payload fails without triggering deletion; fixtures verify exact evidence completeness."
+        "Document the existing 24,000-byte compact UTF-8 payload ceiling, unchanged complete-payload refusal without chunking, and retention/recovery tradeoffs.",
+        "Oversized complete archive fails before token acquisition or PUT and prevents Entra deletion; exact-byte and multibyte fixtures prove this boundary.",
+        "Keep existing Key Vault soft-delete retention and purge protection unchanged; distinguish deleted-secret recovery windows from active-archive expiration."
       ],
       "validation": [
-        "Use the offline commands in the registered validation workflow; record the exact commands, revision and results before implementation is complete."
+        "Import-Module Pester -RequiredVersion 5.7.1; Invoke-Pester -Path ./tests -PassThru",
+        "Parse PowerShell and JSON files; az bicep build --file ./infra/main.bicep --stdout",
+        "Validate canonical backlog JSON and generated Markdown using the reviewed Reference tools."
       ],
       "dependencies": [],
       "authorization": "local-only",
@@ -254,8 +258,12 @@
       "sources": [
         "TODO.md"
       ],
-      "evidence": [],
-      "blocker": null
+      "evidence": [
+        "2026-10-07 verified unchanged existing archive size/refusal and retention configuration on base f21713c7e58b897db2124a49060a15c5a6f13f54. Strict-mode fixtures prove exact 24,000 compact UTF-8 bytes accepted, 24,001 refused before token/PUT, multibyte counting, real Save-DeviceArchive and cleanup-job refusal with Archive failure and zero Entra DELETE calls. No truncation, chunking or retention policy was introduced.",
+        "Registered offline parser/JSON/Bicep gates passed; Pester 5.7.1 Invoke-Pester -Path ./tests -PassThru passed 32/32, zero failed/skipped/not-run. Documented current 7-90-day soft-delete recovery window, default 90, purge protection and no automatic active-archive expiry. Source/fixture proof only; no authentication, archive reads, device actions or resources."
+      ],
+      "blocker": null,
+      "claim": null
     },
     {
       "id": "CLEAN-009",
@@ -398,6 +406,46 @@
       "evidence": [
         "2026-10-07 implemented against exact current-main base 95ec50bfe96a6a704359a70dd97ea92008a23840: every default match is metadata-only; explicit unique recovery alone fetches a value. Duplicate hostnames, absent optional tags, token/native failure sanitization and selected-vault collection-only pagination are covered by production-bound offline fixtures.",
         "Registered offline validation: PowerShell parser and JSON parsing passed; Import-Module Pester -RequiredVersion 5.7.1; Invoke-Pester -Path ./tests -PassThru passed 26/26 with zero failed, skipped or not-run; az bicep build --file ./infra/main.bicep --stdout passed. No Azure authentication, resources, tenant/device actions or archive reads were used. Primary-user indexing (CLEAN-006) and human recovery acceptance (CLEAN-002) remain proposed."
+      ],
+      "blocker": null,
+      "claim": null
+    },
+    {
+      "id": "CLEAN-013",
+      "title": "Fix secret request URI interpolation at archive and recovery boundaries",
+      "kind": "maintenance",
+      "priority": "P1",
+      "status": "done",
+      "wave": 1,
+      "problem": "PowerShell parses SecretName?api as one variable in the writer and explicit recovery URI, failing under strict mode before a request.",
+      "scope": [
+        "runbooks/DeviceCleanup.ps1",
+        "scripts/Get-ArchivedDevice.ps1",
+        "tests/ArchivePayloadSafety.Tests.ps1",
+        "tests/ArchiveDiscovery.Tests.ps1",
+        "docs/backlog.json",
+        "docs/backlog.md"
+      ],
+      "acceptance": [
+        "Writer PUT and explicit recovery GET construct the exact selected vault secret URI with API version 7.4 under strict mode.",
+        "Production helpers execute through mocked transport; fixtures do not inject missing URI variables or mock away the interpolation boundary."
+      ],
+      "validation": [
+        "Import-Module Pester -RequiredVersion 5.7.1; Invoke-Pester -Path ./tests -PassThru",
+        "Parse PowerShell and JSON files and compile Bicep; validate backlog and generated Markdown."
+      ],
+      "dependencies": [
+        "CLEAN-012"
+      ],
+      "authorization": "local-only",
+      "components": [],
+      "sources": [
+        "runbooks/DeviceCleanup.ps1",
+        "scripts/Get-ArchivedDevice.ps1"
+      ],
+      "evidence": [
+        "2026-10-07 reproduced the prior helper failure on exact base f21713c7e58b897db2124a49060a15c5a6f13f54 before transport: SecretName?api was parsed as one undefined variable. Braced SecretName in both existing request expressions. Exact PUT and GET URI assertions exercise production helpers through mocked transport under strict mode; no test injects the missing variable.",
+        "Full Pester 5.7.1 passed 32/32, zero failed/skipped/not-run; parser, JSON, Bicep and canonical backlog/generated view checks passed. Live archive creation and real recovery acceptance remain separate."
       ],
       "blocker": null,
       "claim": null
