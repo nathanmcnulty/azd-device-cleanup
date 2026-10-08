@@ -184,7 +184,9 @@
       "validation": [
         "Use the offline commands in the registered validation workflow; record the exact commands, revision and results before implementation is complete."
       ],
-      "dependencies": [],
+      "dependencies": [
+        "CLEAN-012"
+      ],
       "authorization": "local-only",
       "components": [],
       "sources": [
@@ -355,6 +357,47 @@
       "evidence": [
         "Merged PR #13 resolves issue #12 at 2f1631f220268e86d406e1b8846de4c296ec9b07; implementation is present in current main 2f1631f220268e86d406e1b8846de4c296ec9b07.",
         "Invoke-Pester ./tests -CI: 11/11 passed, including seven batch-cap/exact-override cases, Defender unavailable-data and inert preflight cases. This is source/fixture evidence only; no live authentication, deployment, tenant mutation, device action or delivery is claimed."
+      ],
+      "blocker": null,
+      "claim": null
+    },
+    {
+      "id": "CLEAN-012",
+      "title": "Keep archive discovery metadata-only until explicit recovery",
+      "kind": "maintenance",
+      "priority": "P1",
+      "status": "done",
+      "wave": 1,
+      "problem": "A single default lookup fetches the recovery JSON; optional missing tags also throw under strict mode. Discovery must remain safe before expanding the index.",
+      "scope": [
+        "scripts/Get-ArchivedDevice.ps1",
+        "tests/ArchiveDiscovery.Tests.ps1",
+        "docs/archive-and-recovery.md",
+        "docs/backlog.json",
+        "docs/backlog.md"
+      ],
+      "acceptance": [
+        "Default single and multiple matches use metadata only; only explicit recovery for one exact match reads a value.",
+        "Missing optional tags do not throw or falsely satisfy selectors; duplicate hostnames retain separate stable identities.",
+        "Token acquisition and retrieval failures fail closed without exposing response bodies or recovery payloads.",
+        "Metadata continuation requests remain on the selected vault collection route and refuse repeated pages before reading recovery values."
+      ],
+      "validation": [
+        "Parse all PowerShell files using the registered validate workflow command.",
+        "Import-Module Pester -RequiredVersion 5.7.1; Invoke-Pester -Path ./tests -PassThru",
+        "Parse all JSON files; az bicep build --file ./infra/main.bicep --stdout",
+        "Run canonical Test-AzdBacklog.ps1 and Export-AzdBacklogMarkdown.ps1 -Check against the exact reviewed reference revision."
+      ],
+      "dependencies": [],
+      "authorization": "local-only",
+      "components": [],
+      "sources": [
+        "scripts/Get-ArchivedDevice.ps1",
+        "CLEAN-006"
+      ],
+      "evidence": [
+        "2026-10-07 implemented against exact current-main base 95ec50bfe96a6a704359a70dd97ea92008a23840: every default match is metadata-only; explicit unique recovery alone fetches a value. Duplicate hostnames, absent optional tags, token/native failure sanitization and selected-vault collection-only pagination are covered by production-bound offline fixtures.",
+        "Registered offline validation: PowerShell parser and JSON parsing passed; Import-Module Pester -RequiredVersion 5.7.1; Invoke-Pester -Path ./tests -PassThru passed 26/26 with zero failed, skipped or not-run; az bicep build --file ./infra/main.bicep --stdout passed. No Azure authentication, resources, tenant/device actions or archive reads were used. Primary-user indexing (CLEAN-006) and human recovery acceptance (CLEAN-002) remain proposed."
       ],
       "blocker": null,
       "claim": null

@@ -64,7 +64,36 @@ function Get-DefaultKeyVaultName {
 }
 
 function Get-KeyVaultAccessToken {
-  az account get-access-token --resource https://vault.azure.net --query accessToken --output tsv --only-show-errors
+  $tokenOutput = @(az account get-access-token --resource https://vault.azure.net --query accessToken --output tsv --only-show-errors 2>$null)
+  $nonEmptyLines = @($tokenOutput | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+  if ($LASTEXITCODE -ne 0 -or $nonEmptyLines.Count -ne 1) {
+    throw 'Azure CLI token acquisition failed.'
+  }
+
+  return ([string]$nonEmptyLines[0]).Trim()
+}
+
+function Assert-KeyVaultName {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $VaultName
+  )
+
+  if ($VaultName.Length -lt 3 -or $VaultName.Length -gt 24 -or
+    $VaultName -notmatch '^[a-z][a-z0-9-]*[a-z0-9]$' -or $VaultName -match '--') {
+    throw 'KeyVaultName must be a 3-24 character Azure Key Vault hostname label.'
+  }
+}
+
+function Assert-SecretName {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $SecretName
+  )
+
+  if ($SecretName.Length -lt 1 -or $SecretName.Length -gt 127 -or $SecretName -notmatch '^[A-Za-z0-9-]+$') {
+    throw 'The matched archive secret name is invalid.'
+  }
 }
 
 function Invoke-KeyVaultJson {
@@ -72,15 +101,38 @@ function Invoke-KeyVaultJson {
     [Parameter(Mandatory = $true)]
     [string] $Method,
     [Parameter(Mandatory = $true)]
-    [string] $Uri
+    [string] $Uri,
+    [Parameter(Mandatory = $true)]
+    [string] $VaultName
   )
 
-  $headers = @{
-    Authorization = "Bearer $(Get-KeyVaultAccessToken)"
-    'Content-Type' = 'application/json'
-  }
+  try {
+    Assert-KeyVaultName -VaultName $VaultName
+    $parsedUri = [System.Uri]::new($Uri)
+    $expectedHost = "$VaultName.vault.azure.net"
+    if ($parsedUri.Scheme -cne 'https' -or $parsedUri.Port -ne 443 -or $parsedUri.Host -ine $expectedHost -or
+      -not [string]::IsNullOrWhiteSpace($parsedUri.UserInfo) -or
+      -not [string]::IsNullOrWhiteSpace($parsedUri.Fragment) -or
+      $parsedUri.AbsolutePath -notmatch '^/secrets(?:/[^/]+)?$' -or
+      $parsedUri.Query -notmatch '(^|[?&])api-version=7\.4(&|$)') {
+      throw 'Key Vault request URI is invalid.'
+    }
 
-  Invoke-RestMethod -Method $Method -Uri $Uri -Headers $headers -ErrorAction Stop
+    $headers = @{
+      Authorization = "Bearer $(Get-KeyVaultAccessToken)"
+      'Content-Type' = 'application/json'
+    }
+
+    Invoke-RestMethod -Method $Method -Uri $Uri -Headers $headers -ErrorAction Stop
+  }
+  catch {
+    if ($_.Exception.Message -eq 'Azure CLI token acquisition failed.' -or
+      $_.Exception.Message -eq 'Key Vault request URI is invalid.') {
+      throw $_.Exception.Message
+    }
+
+    throw 'Key Vault request failed.'
+  }
 }
 
 function Get-KeyVaultSecretMetadata {
@@ -89,15 +141,32 @@ function Get-KeyVaultSecretMetadata {
     [string] $VaultName
   )
 
+  Assert-KeyVaultName -VaultName $VaultName
   $items = @()
   $uri = "https://$VaultName.vault.azure.net/secrets?api-version=7.4"
+  $visitedUris = @{}
   while (-not [string]::IsNullOrWhiteSpace($uri)) {
-    $response = Invoke-KeyVaultJson -Method 'GET' -Uri $uri
-    if ($response.value) {
-      $items += @($response.value)
+    if ($visitedUris.ContainsKey($uri)) {
+      throw 'Key Vault metadata pagination repeated a continuation URI.'
+    }
+    $visitedUris[$uri] = $true
+
+    $parsedUri = [System.Uri]::new($uri)
+    if ($parsedUri.Scheme -cne 'https' -or $parsedUri.Port -ne 443 -or
+      $parsedUri.Host -ine "$VaultName.vault.azure.net" -or
+      -not [string]::IsNullOrWhiteSpace($parsedUri.UserInfo) -or
+      -not [string]::IsNullOrWhiteSpace($parsedUri.Fragment) -or
+      $parsedUri.AbsolutePath -cne '/secrets') {
+      throw 'Key Vault metadata continuation URI is invalid.'
     }
 
-    $uri = $response.nextLink
+    $response = Invoke-KeyVaultJson -Method 'GET' -Uri $uri -VaultName $VaultName
+    $values = Get-OptionalPropertyValue -Object $response -Name 'value'
+    if ($null -ne $values) {
+      $items += @($values)
+    }
+
+    $uri = [string](Get-OptionalPropertyValue -Object $response -Name 'nextLink')
   }
 
   return $items
@@ -111,7 +180,36 @@ function Get-KeyVaultSecretValue {
     [string] $SecretName
   )
 
-  return Invoke-KeyVaultJson -Method 'GET' -Uri "https://$VaultName.vault.azure.net/secrets/$SecretName?api-version=7.4"
+  Assert-KeyVaultName -VaultName $VaultName
+  Assert-SecretName -SecretName $SecretName
+  return Invoke-KeyVaultJson -Method 'GET' -Uri "https://$VaultName.vault.azure.net/secrets/$SecretName?api-version=7.4" -VaultName $VaultName
+}
+
+function Get-OptionalPropertyValue {
+  param(
+    [object] $Object,
+    [Parameter(Mandatory = $true)]
+    [string] $Name
+  )
+
+  if ($null -eq $Object) {
+    return $null
+  }
+
+  if ($Object -is [System.Collections.IDictionary]) {
+    if (-not $Object.Contains($Name)) {
+      return $null
+    }
+
+    return $Object[$Name]
+  }
+
+  $property = @($Object.PSObject.Properties | Where-Object { $_.Name -ceq $Name } | Select-Object -First 1)
+  if ($property.Count -eq 0) {
+    return $null
+  }
+
+  return $property[0].Value
 }
 
 function Get-SecretTags {
@@ -120,14 +218,14 @@ function Get-SecretTags {
     [object] $Secret
   )
 
-  if ($Secret.PSObject.Properties.Name -contains 'tags') {
-    return $Secret.tags
+  $tags = Get-OptionalPropertyValue -Object $Secret -Name 'tags'
+  if ($null -ne $tags) {
+    return $tags
   }
 
-  if (($Secret.PSObject.Properties.Name -contains 'attributes') -and
-    ($null -ne $Secret.attributes) -and
-    ($Secret.attributes.PSObject.Properties.Name -contains 'tags')) {
-    return $Secret.attributes.tags
+  $attributes = Get-OptionalPropertyValue -Object $Secret -Name 'attributes'
+  if ($null -ne $attributes) {
+    return Get-OptionalPropertyValue -Object $attributes -Name 'tags'
   }
 
   return $null
@@ -156,31 +254,33 @@ function Test-Match {
   )
 
   $tags = Get-SecretTags -Secret $Secret
-  if (-not [string]::IsNullOrWhiteSpace($SecretName) -and $Secret.id.Split('/')[-1] -ne $SecretName) {
+  $secretId = [string](Get-OptionalPropertyValue -Object $Secret -Name 'id')
+  $secretLeaf = if ([string]::IsNullOrWhiteSpace($secretId)) { '' } else { $secretId.Split('/')[-1] }
+  if (-not [string]::IsNullOrWhiteSpace($SecretName) -and $secretLeaf -ne $SecretName) {
     return $false
   }
 
-  if (-not [string]::IsNullOrWhiteSpace($DisplayName) -and (($null -eq $tags) -or ($tags.displayName -ne $DisplayName))) {
+  if (-not [string]::IsNullOrWhiteSpace($DisplayName) -and (($null -eq $tags) -or ((Get-OptionalPropertyValue -Object $tags -Name 'displayName') -ne $DisplayName))) {
     return $false
   }
 
-  if (-not [string]::IsNullOrWhiteSpace($DeviceId) -and (($null -eq $tags) -or ($tags.deviceId -ne $DeviceId))) {
+  if (-not [string]::IsNullOrWhiteSpace($DeviceId) -and (($null -eq $tags) -or ((Get-OptionalPropertyValue -Object $tags -Name 'deviceId') -ne $DeviceId))) {
     return $false
   }
 
-  if (-not [string]::IsNullOrWhiteSpace($EntraObjectId) -and (($null -eq $tags) -or ($tags.entraObjectId -ne $EntraObjectId))) {
+  if (-not [string]::IsNullOrWhiteSpace($EntraObjectId) -and (($null -eq $tags) -or ((Get-OptionalPropertyValue -Object $tags -Name 'entraObjectId') -ne $EntraObjectId))) {
     return $false
   }
 
-  if (-not [string]::IsNullOrWhiteSpace($SerialNumber) -and (($null -eq $tags) -or ($tags.serialNumber -ne $SerialNumber))) {
+  if (-not [string]::IsNullOrWhiteSpace($SerialNumber) -and (($null -eq $tags) -or ((Get-OptionalPropertyValue -Object $tags -Name 'serialNumber') -ne $SerialNumber))) {
     return $false
   }
 
-  if (-not [string]::IsNullOrWhiteSpace($IntuneManagedDeviceId) -and (($null -eq $tags) -or ($tags.intuneManagedDeviceId -ne $IntuneManagedDeviceId))) {
+  if (-not [string]::IsNullOrWhiteSpace($IntuneManagedDeviceId) -and (($null -eq $tags) -or ((Get-OptionalPropertyValue -Object $tags -Name 'intuneManagedDeviceId') -ne $IntuneManagedDeviceId))) {
     return $false
   }
 
-  if (-not [string]::IsNullOrWhiteSpace($DefenderMachineId) -and (($null -eq $tags) -or ($tags.defenderMachineId -ne $DefenderMachineId))) {
+  if (-not [string]::IsNullOrWhiteSpace($DefenderMachineId) -and (($null -eq $tags) -or ((Get-OptionalPropertyValue -Object $tags -Name 'defenderMachineId') -ne $DefenderMachineId))) {
     return $false
   }
 
@@ -189,16 +289,16 @@ function Test-Match {
   }
 
   $searchLower = $Search.ToLowerInvariant()
-  $candidateValues = @($Secret.id.Split('/')[-1])
+  $candidateValues = @($secretLeaf)
   if ($null -ne $tags) {
     $candidateValues += @(
-      $tags.displayName,
-      $tags.deviceId,
-      $tags.entraObjectId,
-      $tags.serialNumber,
-      $tags.intuneManagedDeviceId,
-      $tags.defenderMachineId,
-      $tags.cleanupRunId
+      (Get-OptionalPropertyValue -Object $tags -Name 'displayName'),
+      (Get-OptionalPropertyValue -Object $tags -Name 'deviceId'),
+      (Get-OptionalPropertyValue -Object $tags -Name 'entraObjectId'),
+      (Get-OptionalPropertyValue -Object $tags -Name 'serialNumber'),
+      (Get-OptionalPropertyValue -Object $tags -Name 'intuneManagedDeviceId'),
+      (Get-OptionalPropertyValue -Object $tags -Name 'defenderMachineId'),
+      (Get-OptionalPropertyValue -Object $tags -Name 'cleanupRunId')
     )
   }
 
@@ -220,6 +320,8 @@ function ConvertTo-Summary {
   )
 
   $tags = Get-SecretTags -Secret $SecretMetadata
+  $secretId = [string](Get-OptionalPropertyValue -Object $SecretMetadata -Name 'id')
+  $secretName = if ([string]::IsNullOrWhiteSpace($secretId)) { $null } else { $secretId.Split('/')[-1] }
   $displayName = $null
   $deviceId = $null
   $entraObjectId = $null
@@ -234,23 +336,23 @@ function ConvertTo-Summary {
   $lastSeenIntune = $null
   $lastSeenDefender = $null
   if ($null -ne $tags) {
-    $displayName = $tags.displayName
-    $deviceId = $tags.deviceId
-    $entraObjectId = $tags.entraObjectId
-    $serialNumber = $tags.serialNumber
-    $intuneManagedDeviceId = $tags.intuneManagedDeviceId
-    $defenderMachineId = $tags.defenderMachineId
-    $archivedAt = $tags.archivedAt
-    $cleanupRunId = $tags.cleanupRunId
-    $effectiveHeartbeatSource = $tags.effectiveHeartbeatSource
-    $effectiveHeartbeatTimestamp = $tags.effectiveHeartbeatTimestamp
-    $lastSeenEntra = $tags.lastSeenEntra
-    $lastSeenIntune = $tags.lastSeenIntune
-    $lastSeenDefender = $tags.lastSeenDefender
+    $displayName = Get-OptionalPropertyValue -Object $tags -Name 'displayName'
+    $deviceId = Get-OptionalPropertyValue -Object $tags -Name 'deviceId'
+    $entraObjectId = Get-OptionalPropertyValue -Object $tags -Name 'entraObjectId'
+    $serialNumber = Get-OptionalPropertyValue -Object $tags -Name 'serialNumber'
+    $intuneManagedDeviceId = Get-OptionalPropertyValue -Object $tags -Name 'intuneManagedDeviceId'
+    $defenderMachineId = Get-OptionalPropertyValue -Object $tags -Name 'defenderMachineId'
+    $archivedAt = Get-OptionalPropertyValue -Object $tags -Name 'archivedAt'
+    $cleanupRunId = Get-OptionalPropertyValue -Object $tags -Name 'cleanupRunId'
+    $effectiveHeartbeatSource = Get-OptionalPropertyValue -Object $tags -Name 'effectiveHeartbeatSource'
+    $effectiveHeartbeatTimestamp = Get-OptionalPropertyValue -Object $tags -Name 'effectiveHeartbeatTimestamp'
+    $lastSeenEntra = Get-OptionalPropertyValue -Object $tags -Name 'lastSeenEntra'
+    $lastSeenIntune = Get-OptionalPropertyValue -Object $tags -Name 'lastSeenIntune'
+    $lastSeenDefender = Get-OptionalPropertyValue -Object $tags -Name 'lastSeenDefender'
   }
 
   return [pscustomobject]@{
-    SecretName = $SecretMetadata.id.Split('/')[-1]
+    SecretName = $secretName
     DisplayName = $displayName
     DeviceId = $deviceId
     EntraObjectId = $entraObjectId
@@ -277,82 +379,157 @@ function ConvertTo-ArchiveView {
     [bool] $ShowRecoveryMaterial
   )
 
+  $laps = Get-OptionalPropertyValue -Object $ArchivePayload -Name 'laps'
+  $bitlocker = Get-OptionalPropertyValue -Object $ArchivePayload -Name 'bitlocker'
   $lapsCredentialCount = 0
-  if ($null -ne $ArchivePayload.laps) {
-    $lapsCredentialCount = @($ArchivePayload.laps.credentials).Count
+  if ($null -ne $laps) {
+    $credentials = Get-OptionalPropertyValue -Object $laps -Name 'credentials'
+    if ($null -ne $credentials) {
+      $lapsCredentialCount = @($credentials).Count
+    }
   }
-  $bitLockerKeyCount = @($ArchivePayload.bitlocker).Count
+  $bitLockerKeyCount = 0
+  if ($null -ne $bitlocker) {
+    $bitLockerKeyCount = @($bitlocker).Count
+  }
 
   $view = [ordered]@{
     secretName = $SecretName
-    archivedAt = $ArchivePayload.archivedAt
-    cleanupContext = $ArchivePayload.cleanupContext
-    device = $ArchivePayload.device
-    heartbeats = $ArchivePayload.heartbeats
-    intune = $ArchivePayload.intune
-    defenderForEndpoint = $ArchivePayload.defenderForEndpoint
+    archivedAt = Get-OptionalPropertyValue -Object $ArchivePayload -Name 'archivedAt'
+    cleanupContext = Get-OptionalPropertyValue -Object $ArchivePayload -Name 'cleanupContext'
+    device = Get-OptionalPropertyValue -Object $ArchivePayload -Name 'device'
+    heartbeats = Get-OptionalPropertyValue -Object $ArchivePayload -Name 'heartbeats'
+    intune = Get-OptionalPropertyValue -Object $ArchivePayload -Name 'intune'
+    defenderForEndpoint = Get-OptionalPropertyValue -Object $ArchivePayload -Name 'defenderForEndpoint'
     lapsCredentialCount = $lapsCredentialCount
     bitLockerKeyCount = $bitLockerKeyCount
   }
 
   if ($ShowRecoveryMaterial) {
-    $view['laps'] = $ArchivePayload.laps
-    $view['bitlocker'] = $ArchivePayload.bitlocker
+    $view['laps'] = $laps
+    $view['bitlocker'] = $bitlocker
   }
 
   return [pscustomobject] $view
 }
 
-Ensure-AzureCli
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
-if ([string]::IsNullOrWhiteSpace($KeyVaultName)) {
-  $KeyVaultName = Get-DefaultKeyVaultName -RepositoryRoot $repoRoot
-}
+function Invoke-ArchivedDeviceLookup {
+  param(
+    [string] $KeyVaultName = '',
+    [string] $Search = '',
+    [string] $DisplayName = '',
+    [string] $DeviceId = '',
+    [string] $EntraObjectId = '',
+    [string] $SerialNumber = '',
+    [string] $IntuneManagedDeviceId = '',
+    [string] $DefenderMachineId = '',
+    [string] $SecretName = '',
+    [switch] $ShowRecoveryMaterial,
+    [switch] $AsJson
+  )
 
-$allSecrets = @(Get-KeyVaultSecretMetadata -VaultName $KeyVaultName)
-$matches = @($allSecrets | Where-Object {
-  Test-Match `
-    -Secret $_ `
-    -Search $Search `
-    -DisplayName $DisplayName `
-    -DeviceId $DeviceId `
-    -EntraObjectId $EntraObjectId `
-    -SerialNumber $SerialNumber `
-    -IntuneManagedDeviceId $IntuneManagedDeviceId `
-    -DefenderMachineId $DefenderMachineId `
-    -SecretName $SecretName
-})
+  Ensure-AzureCli
+  if ([string]::IsNullOrWhiteSpace($KeyVaultName)) {
+    $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
+    $KeyVaultName = Get-DefaultKeyVaultName -RepositoryRoot $repoRoot
+  }
+  Assert-KeyVaultName -VaultName $KeyVaultName
 
-if ($matches.Count -eq 0) {
-  Write-Host "No archived device secrets matched the supplied search in vault '$KeyVaultName'."
-  exit 0
-}
+  $allSecrets = @(Get-KeyVaultSecretMetadata -VaultName $KeyVaultName)
+  $matches = @($allSecrets | Where-Object {
+    Test-Match `
+      -Secret $_ `
+      -Search $Search `
+      -DisplayName $DisplayName `
+      -DeviceId $DeviceId `
+      -EntraObjectId $EntraObjectId `
+      -SerialNumber $SerialNumber `
+      -IntuneManagedDeviceId $IntuneManagedDeviceId `
+      -DefenderMachineId $DefenderMachineId `
+      -SecretName $SecretName
+  })
 
-if (($matches.Count -gt 1) -and (-not $ShowRecoveryMaterial)) {
-  $summaries = @($matches | ForEach-Object { ConvertTo-Summary -SecretMetadata $_ } | Sort-Object ArchivedAt -Descending)
+  if ($matches.Count -eq 0) {
+    Write-Host "No archived device secrets matched the supplied search in vault '$KeyVaultName'."
+    return
+  }
+
+  if (-not $ShowRecoveryMaterial) {
+    $summaries = @($matches | ForEach-Object { ConvertTo-Summary -SecretMetadata $_ } | Sort-Object ArchivedAt -Descending)
+    if ($AsJson) {
+      $summaries | ConvertTo-Json -Depth 6
+    }
+    else {
+      $summaries | Format-Table -AutoSize
+    }
+
+    if ($matches.Count -gt 1) {
+      Write-Host 'Multiple matches were found. Narrow the search before requesting recovery material for a single record.'
+    }
+    else {
+      Write-Host 'Metadata-only output shown. Re-run with -ShowRecoveryMaterial only for the intended single record.'
+    }
+    return
+  }
+
+  if ($matches.Count -gt 1) {
+    throw 'Multiple archived device secrets matched the supplied search. Narrow the search before requesting recovery material.'
+  }
+
+  $matchedId = [string](Get-OptionalPropertyValue -Object $matches[0] -Name 'id')
+  $secretPrefix = "https://$KeyVaultName.vault.azure.net/secrets/"
+  $parsedMatchedId = $null
+  try {
+    $parsedMatchedId = [System.Uri]::new($matchedId)
+  }
+  catch {
+    $parsedMatchedId = $null
+  }
+
+  if ($null -eq $parsedMatchedId -or $parsedMatchedId.Scheme -cne 'https' -or
+    $parsedMatchedId.Host -ine "$KeyVaultName.vault.azure.net" -or
+    -not [string]::IsNullOrWhiteSpace($parsedMatchedId.UserInfo) -or
+    -not [string]::IsNullOrWhiteSpace($parsedMatchedId.Fragment) -or
+    -not [string]::IsNullOrWhiteSpace($parsedMatchedId.Query) -or
+    $parsedMatchedId.AbsolutePath -notmatch '^/secrets/[^/]+$' -or
+    -not $matchedId.StartsWith($secretPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'The matched archive record has an invalid secret identity.'
+  }
+  $secretName = $parsedMatchedId.AbsolutePath.Substring('/secrets/'.Length)
+  Assert-SecretName -SecretName $secretName
+
+  $secret = Get-KeyVaultSecretValue -VaultName $KeyVaultName -SecretName $secretName
+  $secretValue = Get-OptionalPropertyValue -Object $secret -Name 'value'
+  if ([string]::IsNullOrWhiteSpace([string]$secretValue)) {
+    throw 'The archived secret has no payload value.'
+  }
+
+  try {
+    $archivePayload = ([string]$secretValue) | ConvertFrom-Json -Depth 20 -ErrorAction Stop
+  }
+  catch {
+    throw 'The archived secret payload could not be parsed.'
+  }
+
+  $view = ConvertTo-ArchiveView -SecretName $secretName -ArchivePayload $archivePayload -ShowRecoveryMaterial:$ShowRecoveryMaterial
+
   if ($AsJson) {
-    $summaries | ConvertTo-Json -Depth 6
+    $view | ConvertTo-Json -Depth 20
   }
   else {
-    $summaries | Format-Table -AutoSize
+    $view
   }
-
-  Write-Host "Multiple matches were found. Re-run with -SecretName, -EntraObjectId, -DeviceId, -SerialNumber, -IntuneManagedDeviceId, -DefenderMachineId, or -ShowRecoveryMaterial for a single record."
-  exit 0
 }
 
-if ($matches.Count -gt 1) {
-  throw "Multiple archived device secrets matched the supplied search. Narrow the search before requesting recovery material."
-}
-
-$secretName = $matches[0].id.Split('/')[-1]
-$secret = Get-KeyVaultSecretValue -VaultName $KeyVaultName -SecretName $secretName
-$archivePayload = $secret.value | ConvertFrom-Json -Depth 20
-$view = ConvertTo-ArchiveView -SecretName $secretName -ArchivePayload $archivePayload -ShowRecoveryMaterial:$ShowRecoveryMaterial
-
-if ($AsJson) {
-  $view | ConvertTo-Json -Depth 20
-}
-else {
-  $view
-}
+Invoke-ArchivedDeviceLookup `
+  -KeyVaultName $KeyVaultName `
+  -Search $Search `
+  -DisplayName $DisplayName `
+  -DeviceId $DeviceId `
+  -EntraObjectId $EntraObjectId `
+  -SerialNumber $SerialNumber `
+  -IntuneManagedDeviceId $IntuneManagedDeviceId `
+  -DefenderMachineId $DefenderMachineId `
+  -SecretName $SecretName `
+  -ShowRecoveryMaterial:$ShowRecoveryMaterial `
+  -AsJson:$AsJson
