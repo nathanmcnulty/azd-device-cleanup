@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.46.1.21595",
-      "templateHash": "13690740393680042492"
+      "version": "0.42.1.51946",
+      "templateHash": "5716547085173477779"
     }
   },
   "parameters": {
@@ -197,6 +197,13 @@
       "maxValue": 15,
       "metadata": {
         "description": "Device extensionAttribute slot used for the derived Intune check-in value. Set to 0 to disable this enrichment."
+      }
+    },
+    "primaryArchiveUserCollectionEnabled": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Collect the bounded Intune managed-device primary-user relationship only while archiving a delete candidate."
       }
     },
     "defenderCheckInExtensionAttributeNumber": {
@@ -406,8 +413,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.46.1.21595",
-              "templateHash": "12473696188251669568"
+              "version": "0.42.1.51946",
+              "templateHash": "16249283300644205751"
             }
           },
           "parameters": {
@@ -945,6 +952,10 @@
     "INTUNE_CHECKIN_ATTRIBUTE_NUMBER": {
       "type": "string",
       "value": "[string(parameters('intuneCheckInExtensionAttributeNumber'))]"
+    },
+    "PRIMARY_ARCHIVE_USER_COLLECTION_ENABLED": {
+      "type": "string",
+      "value": "[if(parameters('primaryArchiveUserCollectionEnabled'), 'true', 'false')]"
     },
     "LOGIC_APP_NOTIFICATIONS_ENABLED": {
       "type": "string",

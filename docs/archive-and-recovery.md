@@ -14,6 +14,10 @@ Each secret also gets tags for:
 - `archivedAt`
 - `cleanupSource`
 
+Every newly successful archive version also gets a companion metadata-index secret named `device-archive-index-<sha256>`, where the hash covers the complete normalized versioned archive URI. The index has a distinct content type and schema, and its tags contain bounded lookup hints without a UPN. The archive succeeds first, the index succeeds second, and device deletion occurs only after both writes. An index failure can therefore leave a recoverable orphan archive version, but it cannot permit deletion.
+
+The fixed index value includes only the archive name, exact 32-hex version and canonical public-vault URI, bounded device identifiers, display name, serial number, archived time, cleanup run ID, and bounded primary-user state, ID, and UPN. Entra object IDs, Entra device IDs, Intune managed-device IDs, and primary-user IDs use GUID-D syntax; Defender machine IDs use the service's 40-hex syntax. Arbitrary device, heartbeat, LAPS, BitLocker, or recovery objects are rejected. The compact index value is limited to 8,192 UTF-8 bytes; scalar lengths are validated and never silently truncated.
+
 ## Archive schema
 
 Each archived device is stored as a JSON secret like:
@@ -40,14 +44,14 @@ Each archived device is stored as a JSON secret like:
   "intune": {
     "state": "Fresh",
     "lastSyncDateTime": "2026-02-28T00:00:00.0000000Z",
-    "managedDeviceId": "managed-device-id",
+    "managedDeviceId": "93fbeef1-3dca-4ee5-b986-89183f4c2868",
     "deviceName": "LT-12345",
     "extensionAttributeValue": "Fresh|2026-02-28T00:00:00.0000000Z"
   },
   "defenderForEndpoint": {
     "state": "Fresh",
     "lastSeen": "2026-02-28T00:00:00.0000000Z",
-    "machineId": "mde-machine-id",
+    "machineId": "1e5bc9d7e413ddd7902c2932e418702b84d0cc07",
     "deviceName": "LT-12345",
     "sensorHealthState": "Active",
     "onboardingStatus": "Onboarded",
@@ -148,6 +152,9 @@ Examples:
 .\scripts\Get-ArchivedDevice.ps1 -SerialNumber "<serial-number>"
 .\scripts\Get-ArchivedDevice.ps1 -IntuneManagedDeviceId "<managed-device-guid>"
 .\scripts\Get-ArchivedDevice.ps1 -DefenderMachineId "<defender-machine-id>"
+.\scripts\Get-ArchivedDevice.ps1 -PrimaryUserId "<entra-user-object-id>"
+.\scripts\Get-ArchivedDevice.ps1 -PrimaryUserPrincipalName "user@example.com"
+.\scripts\Get-ArchivedDevice.ps1 -ArchiveVersion "<32-hex-key-vault-version>" -ShowRecoveryMaterial
 .\scripts\Get-ArchivedDevice.ps1 -EntraObjectId "<object-guid>" -ShowRecoveryMaterial
 ```
 
@@ -155,7 +162,9 @@ Add `-ShowRecoveryMaterial` only when you need the LAPS password or BitLocker
 keys on screen. That switch is explicit recovery authorization for one
 unambiguous record. If a search matches multiple records, the script fails
 before reading any secret value; narrow the search first. Duplicate hostnames
-remain separate records and are never treated as a unique identity.
+and UPNs remain separate records and are never treated as a unique identity.
+
+Ordinary discovery lists Key Vault metadata and performs zero secret-value reads. Valid structurally bound indexes appear as `IndexedExactVersion`; the current unversioned archive metadata remains visible as a `LegacyLatestAlias`. The alias is retained because a newer archive version can exist without an index after a failed second write. Malformed reserved-prefix secrets and legacy rows with a foreign vault authority, UserInfo, a nondefault port, nested tag values, or oversized scalars are quarantined. An explicit UPN selector reads only bounded index values. Indexed recovery revalidates the index schema, tags, hash, selected vault, archive name, and exact version before reading that exact archive version; every index and archive value response must return the requested public-vault identity and expected content type, and indexed recovery never falls back to latest.
 
 Each archived secret now carries searchable metadata in both the JSON payload and Key Vault tags, including:
 
@@ -166,9 +175,7 @@ Each archived secret now carries searchable metadata in both the JSON payload an
 - `cleanupRunId` plus the effective heartbeat source and timestamp that drove the delete decision
 
 The archive reader supports the recorded metadata keys and bounded selectors.
-Primary-user lookup is not indexed or supported by this workflow; CLEAN-006
-remains proposed for any future index expansion. Missing optional tags are
-reported as empty metadata and a selector whose tag is absent does not match.
+Primary-user lookup is optional and disabled by default. When enabled, the runbook resolves the exact candidate Entra device ID to a bounded Intune managed-device filter and reads that managed device's direct users relationship. It does not use the scalar managed-device UPN field and never chooses the first user from ambiguous data. States such as `None`, `Single`, `Multiple`, mapping ambiguity, overflow, conflict, and unavailability are retained without inventing an identity. Missing optional fields never match selectors.
 
 ## Recovery drill and SOP
 

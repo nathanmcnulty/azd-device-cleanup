@@ -57,8 +57,10 @@ Describe 'Archived device reader safety boundaries' {
         $script:metadataCalls = 0
         Mock Ensure-AzureCli {}
         Mock Get-KeyVaultSecretValue {
+            param($VaultName,$SecretName,$Version,$ExpectedContentType)
             $script:valueCalls++
-            return [pscustomobject]@{ value = $script:archiveJson }
+            $returnedVersion=if([string]::IsNullOrWhiteSpace($Version)){'11111111111111111111111111111111'}else{$Version}
+            return [pscustomobject]@{ id="https://archive-vault.vault.azure.net/secrets/$SecretName/$returnedVersion";contentType='application/json';value=$script:archiveJson }
         }
     }
 
@@ -160,8 +162,8 @@ Describe 'Archived device reader safety boundaries' {
         (Test-Match -Secret $nullAttributes -DeviceId 'device-1') | Should -BeFalse
         (Test-Match -Secret $partialTags -DeviceId 'device-1') | Should -BeFalse
         (Test-Match -Secret $hashtableTags -DisplayName 'LT-100') | Should -BeTrue
-        { ConvertTo-Summary -SecretMetadata $nullAttributes } | Should -Not -Throw
-        (ConvertTo-Summary -SecretMetadata $nullAttributes).DisplayName | Should -BeNullOrEmpty
+        { ConvertTo-Summary -SecretMetadata $nullAttributes -VaultName 'archive-vault' } | Should -Not -Throw
+        (ConvertTo-Summary -SecretMetadata $nullAttributes -VaultName 'archive-vault').DisplayName | Should -BeNullOrEmpty
     }
 
     It 'rejects an invalid vault hostname before token or metadata access' {
@@ -304,8 +306,9 @@ Describe 'Archived device reader safety boundaries' {
                 tags = [pscustomobject]@{ displayName = 'LT-100' }
             })
 
-        { Invoke-ArchivedDeviceLookup -KeyVaultName 'archive-vault' -DisplayName 'LT-100' -ShowRecoveryMaterial } |
-            Should -Throw '*invalid secret identity*'
+        $output=@(Invoke-ArchivedDeviceLookup -KeyVaultName 'archive-vault' -DisplayName 'LT-100' -ShowRecoveryMaterial *>&1)|Out-String
+        $output | Should -Match 'No archived device secrets matched'
+        $output | Should -Not -Match 'SECRET_SENTINEL'
         $script:valueCalls | Should -Be 0
     }
 
@@ -342,7 +345,7 @@ Describe 'Explicit recovery transport URI' {
 
     It 'uses the exact selected secret URI through the real recovery helper' {
         Mock Get-KeyVaultAccessToken { 'offline-token' }
-        Mock Invoke-RestMethod { [pscustomobject]@{ value = '{}' } }
+        Mock Invoke-RestMethod { [pscustomobject]@{ id='https://archive-vault.vault.azure.net/secrets/archive-device/11111111111111111111111111111111';contentType='application/json';value='{}' } }
 
         $value = Get-KeyVaultSecretValue -VaultName 'archive-vault' -SecretName 'archive-device'
 

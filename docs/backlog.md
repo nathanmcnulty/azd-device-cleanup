@@ -538,7 +538,7 @@ Review CLEAN-005 against the current repository state. Its status or authorizati
 
 - **Kind:** feature
 - **Priority:** P2
-- **Status:** proposed
+- **Status:** done
 - **Wave:** 3
 - **Authorization:** local-only
 - **Blocker:** _none_
@@ -550,8 +550,13 @@ Operators need serial, hostname and primary-user lookup without exposing recover
 
 **Scope:**
 
-- scripts/
+- runbooks/DeviceCleanup.ps1
+- scripts/Get-ArchivedDevice.ps1
+- scripts/postprovision.ps1
+- scripts/preflight.ps1
 - infra/
+- tests/
+- schemas/
 - docs/
 - azd-permissions.json
 
@@ -562,7 +567,10 @@ Operators need serial, hostname and primary-user lookup without exposing recover
 
 **Validation:**
 
-- Use the offline commands in the registered validation workflow; record the exact commands, revision and results before implementation is complete.
+- Invoke-Pester ./tests with Pester 5.7.1&colon; 81/81 on PowerShell 7.6.6.
+- Invoke-Pester ./tests/ArchiveDiscovery.Tests.ps1, ./tests/ArchiveIndexDiscovery.Tests.ps1, ./tests/PermissionParity.Tests.ps1 with Pester 5.7.1&colon; 44/44 on PowerShell 7.2.24.
+- Parse repository PowerShell and JSON; Test-Json azd-permissions.json against canonical permission-requirements.schema.json; verify each code evidence SHA-256 over canonical UTF-8/LF source.
+- az bicep build --file ./infra/main.bicep --stdout; verify semantic equality with infra/main.json; Test-AzdBacklog.ps1; Export-AzdBacklogMarkdown.ps1 -Check; git diff --check.
 
 **Dependencies:**
 
@@ -578,7 +586,9 @@ Operators need serial, hostname and primary-user lookup without exposing recover
 
 **Evidence:**
 
-- _none_
+- 2026-10-07 source implementation from base c7b3e6eaa2a76722fc45c61b95084c41f93bab24&colon; each successful new recovery archive receives a separate closed, bounded, version-bound metadata index before Entra deletion. Default discovery remains metadata-only; explicit UPN lookup reads bounded index values, and explicit recovery validates the exact indexed archive version. Legacy latest aliases remain visible when a newer archive has no index. Optional relationship-based primary-user collection defaults false and never changes eligibility or heartbeat selection.
+- Validation&colon; PowerShell 7.6.6 / Pester 5.7.1 full suite 81/81 passed with zero failed, skipped or not-run; reader and permission suites on PowerShell 7.2.24 passed 44/44. Root independently replayed the full suite and parser, JSON, canonical permission schema and evidence hashes, Bicep, backlog rendering and diff checks. Independent exact 23-file review passed with a separate 49/49 focused replay; all ten earlier review findings were repaired. Failed r1 source and evidence were preserved.
+- Qualification remains source/offline only. The selected lab managedDevices read returned HTTP 403 before the direct users relationship was reached; cause remains unknown and no new permission was granted. No deployment, device action, real recovery read or human recovery drill was performed. Production deployment, effective grants, live relationship reads and recovery acceptance remain separate qualification work.
 
 **Review and authorization note:**
 

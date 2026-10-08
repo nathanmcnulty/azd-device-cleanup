@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'PermissionRequirements.ps1')
 
 function Assert-NativeCommandSucceeded {
   param(
@@ -77,7 +78,7 @@ function Get-OptionalEnvironmentValue {
     $value = $script:AzdEnvironmentValues[$Name]
   }
 
-  if ($null -eq $value) {
+  if ([string]::IsNullOrWhiteSpace($value)) {
     return $Default
   }
 
@@ -622,7 +623,7 @@ function Ensure-AppRoleAssignments {
     [object] $ResourceServicePrincipal,
     [Parameter(Mandatory = $true)]
     [string[]] $PermissionNames,
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true)][AllowEmptyCollection()]
     [System.Collections.ArrayList] $ExistingAssignments
   )
 
@@ -672,7 +673,7 @@ function Remove-AppRoleAssignments {
     [object] $ResourceServicePrincipal,
     [Parameter(Mandatory = $true)]
     [string[]] $PermissionNames,
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true)][AllowEmptyCollection()]
     [System.Collections.ArrayList] $ExistingAssignments
   )
 
@@ -698,6 +699,27 @@ function Remove-AppRoleAssignments {
   }
 }
 
+function Sync-GraphAppRoleAssignments {
+  param(
+    [Parameter(Mandatory = $true)][string] $PrincipalId,
+    [Parameter(Mandatory = $true)][object] $GraphServicePrincipal,
+    [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.ArrayList] $ExistingAssignments,
+    [Parameter(Mandatory = $true)][int] $IntuneCheckInAttributeNumber,
+    [Parameter(Mandatory = $true)][bool] $PrimaryArchiveUserCollectionEnabled,
+    [Parameter(Mandatory = $true)][bool] $AdvancedHuntingEnabled
+  )
+
+  $permissionNames = @(Get-RequiredGraphPermissionNames -IntuneCheckInAttributeNumber $IntuneCheckInAttributeNumber -PrimaryArchiveUserCollectionEnabled $PrimaryArchiveUserCollectionEnabled -AdvancedHuntingEnabled $AdvancedHuntingEnabled)
+  Ensure-AppRoleAssignments -PrincipalId $PrincipalId -ResourceServicePrincipal $GraphServicePrincipal -PermissionNames $permissionNames -ExistingAssignments $ExistingAssignments
+  if (-not $AdvancedHuntingEnabled) {
+    Remove-AppRoleAssignments -PrincipalId $PrincipalId -ResourceServicePrincipal $GraphServicePrincipal -PermissionNames @('ThreatHunting.Read.All') -ExistingAssignments $ExistingAssignments
+  }
+  if ($IntuneCheckInAttributeNumber -le 0 -and -not $PrimaryArchiveUserCollectionEnabled) {
+    Remove-AppRoleAssignments -PrincipalId $PrincipalId -ResourceServicePrincipal $GraphServicePrincipal -PermissionNames @('DeviceManagementManagedDevices.Read.All') -ExistingAssignments $ExistingAssignments
+  }
+  return $permissionNames
+}
+
 Ensure-AzureCli
 Ensure-AutomationExtension
 Ensure-AzAutomationModule
@@ -713,26 +735,9 @@ foreach ($assignment in @((Invoke-GraphJson -Method 'GET' -Url "https://graph.mi
 $defenderCheckInAttributeNumber = [int](Get-RequiredEnvironmentValue -Name 'DEFENDER_CHECKIN_ATTRIBUTE_NUMBER')
 $defenderApiEnabled = $defenderCheckInAttributeNumber -gt 0
 $advancedHuntingEnabled = ConvertTo-BooleanValue -Name 'ADVANCED_HUNTING_ENABLED' -Value (Get-RequiredEnvironmentValue -Name 'ADVANCED_HUNTING_ENABLED')
-$graphPermissionNames = @(
-  'Device.Read.All',
-  'Device.ReadWrite.All',
-  'Group.Read.All',
-  'GroupMember.Read.All',
-  'DeviceLocalCredential.Read.All',
-  'BitlockerKey.Read.All',
-  'DeviceManagementManagedDevices.Read.All'
-)
-if ($advancedHuntingEnabled) {
-  $graphPermissionNames += 'ThreatHunting.Read.All'
-}
-
-Ensure-AppRoleAssignments -PrincipalId $principalId -ResourceServicePrincipal $graphSp -PermissionNames $graphPermissionNames -ExistingAssignments $existingAssignments
-
-if (-not $advancedHuntingEnabled) {
-  Remove-AppRoleAssignments -PrincipalId $principalId -ResourceServicePrincipal $graphSp -PermissionNames @(
-    'ThreatHunting.Read.All'
-  ) -ExistingAssignments $existingAssignments
-}
+$intuneCheckInAttributeNumber = [int](Get-RequiredEnvironmentValue -Name 'INTUNE_CHECKIN_ATTRIBUTE_NUMBER')
+$primaryArchiveUserCollectionEnabled = ConvertTo-BooleanValue -Name 'PRIMARY_ARCHIVE_USER_COLLECTION_ENABLED' -Value (Get-OptionalEnvironmentValue -Name 'PRIMARY_ARCHIVE_USER_COLLECTION_ENABLED' -Default 'false')
+$graphPermissionNames = @(Sync-GraphAppRoleAssignments -PrincipalId $principalId -GraphServicePrincipal $graphSp -ExistingAssignments $existingAssignments -IntuneCheckInAttributeNumber $intuneCheckInAttributeNumber -PrimaryArchiveUserCollectionEnabled $primaryArchiveUserCollectionEnabled -AdvancedHuntingEnabled $advancedHuntingEnabled)
 
 if ($defenderApiEnabled) {
   Ensure-AppRoleAssignments -PrincipalId $principalId -ResourceServicePrincipal $defenderSp -PermissionNames @(
@@ -767,6 +772,7 @@ $exclusionDeviceGroupObjectId = Get-OptionalEnvironmentValue -Name 'EXCLUSION_DE
 $recoveryGroupName = Get-OptionalEnvironmentValue -Name 'RECOVERY_GROUP_NAME' -Default 'device-cleanup-recovery'
 $recoveryGroupObjectId = Get-OptionalEnvironmentValue -Name 'RECOVERY_GROUP_OBJECT_ID'
 $intuneCheckInAttributeNumber = Get-RequiredEnvironmentValue -Name 'INTUNE_CHECKIN_ATTRIBUTE_NUMBER'
+$primaryArchiveUserCollectionEnabled = Get-OptionalEnvironmentValue -Name 'PRIMARY_ARCHIVE_USER_COLLECTION_ENABLED' -Default 'false'
 $defenderCheckInAttributeNumber = Get-RequiredEnvironmentValue -Name 'DEFENDER_CHECKIN_ATTRIBUTE_NUMBER'
 $intuneDynamicGroupEnabled = Get-RequiredEnvironmentValue -Name 'INTUNE_DYNAMIC_GROUP_ENABLED'
 $intuneDynamicGroupName = Get-OptionalEnvironmentValue -Name 'INTUNE_DYNAMIC_GROUP_NAME'
@@ -823,6 +829,7 @@ $renderedRunbookPath = Get-RenderedRunbookPath -RunbookTemplatePath $runbookTemp
   '__DEVICE_DELETE_ENABLED__' = $deviceDeleteEnabled
   '__EXCLUSION_DEVICE_GROUP_ID__' = $resolvedExclusionGroupId
   '__INTUNE_CHECKIN_ATTRIBUTE_NUMBER__' = $intuneCheckInAttributeNumber
+  '__PRIMARY_ARCHIVE_USER_COLLECTION_ENABLED__' = $primaryArchiveUserCollectionEnabled
   '__DEFENDER_CHECKIN_ATTRIBUTE_NUMBER__' = $defenderCheckInAttributeNumber
   '__ADVANCED_HUNTING_ENABLED__' = $advancedHuntingEnabled
   '__ADVANCED_HUNTING_LOOKBACK_DAYS__' = $advancedHuntingLookbackDays
@@ -881,6 +888,7 @@ try {
         DisableEnabled = $deviceDisableEnabled
         DeleteEnabled = $deviceDeleteEnabled
         IntuneCheckInAttributeNumber = $intuneCheckInAttributeNumber
+        PrimaryArchiveUserCollectionEnabled = $primaryArchiveUserCollectionEnabled
         DefenderCheckInAttributeNumber = $defenderCheckInAttributeNumber
         AdvancedHuntingEnabled = $advancedHuntingEnabled
         AdvancedHuntingLookbackDays = $advancedHuntingLookbackDays

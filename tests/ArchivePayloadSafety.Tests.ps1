@@ -48,7 +48,7 @@ Describe 'Archive payload size safety' {
             $script:putCalls++
             $script:lastPutUri = $Uri
             $script:lastPutBody = $Body
-            return [pscustomobject]@{}
+            return [pscustomobject]@{ id = "https://archive-vault.vault.azure.net/secrets/archive-device/0123456789abcdef0123456789abcdef" }
         }
     }
 
