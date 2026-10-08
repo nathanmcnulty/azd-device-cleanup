@@ -325,3 +325,30 @@ Describe 'Archived device reader safety boundaries' {
         $script:requestCalls | Should -Be 0
     }
 }
+
+Describe 'Explicit recovery transport URI' {
+    BeforeAll {
+        Set-StrictMode -Version Latest
+        $ErrorActionPreference = 'Stop'
+        $tokens = $null
+        $parseErrors = $null
+        $scriptPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts/Get-ArchivedDevice.ps1'
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
+        if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
+        foreach ($definition in @($ast.EndBlock.Statements | Where-Object { $_ -is [System.Management.Automation.Language.FunctionDefinitionAst] })) {
+            . ([scriptblock]::Create($definition.Extent.Text))
+        }
+    }
+
+    It 'uses the exact selected secret URI through the real recovery helper' {
+        Mock Get-KeyVaultAccessToken { 'offline-token' }
+        Mock Invoke-RestMethod { [pscustomobject]@{ value = '{}' } }
+
+        $value = Get-KeyVaultSecretValue -VaultName 'archive-vault' -SecretName 'archive-device'
+
+        $value.value | Should -Be '{}'
+        Should -Invoke Invoke-RestMethod -Times 1 -Exactly -ParameterFilter {
+            $Method -eq 'GET' -and $Uri -ceq 'https://archive-vault.vault.azure.net/secrets/archive-device?api-version=7.4'
+        }
+    }
+}

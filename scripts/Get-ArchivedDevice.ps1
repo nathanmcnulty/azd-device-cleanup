@@ -182,7 +182,7 @@ function Get-KeyVaultSecretValue {
 
   Assert-KeyVaultName -VaultName $VaultName
   Assert-SecretName -SecretName $SecretName
-  return Invoke-KeyVaultJson -Method 'GET' -Uri "https://$VaultName.vault.azure.net/secrets/$SecretName?api-version=7.4" -VaultName $VaultName
+  return Invoke-KeyVaultJson -Method 'GET' -Uri "https://$VaultName.vault.azure.net/secrets/${SecretName}?api-version=7.4" -VaultName $VaultName
 }
 
 function Get-OptionalPropertyValue {
