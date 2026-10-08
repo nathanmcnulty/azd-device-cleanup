@@ -95,6 +95,9 @@ param deleteEnabled bool = false
 @description('Device extensionAttribute slot used for the derived Intune check-in value. Set to 0 to disable this enrichment.')
 param intuneCheckInExtensionAttributeNumber int = 14
 
+@description('Collect the bounded Intune managed-device primary-user relationship only while archiving a delete candidate.')
+param primaryArchiveUserCollectionEnabled bool = false
+
 @minValue(0)
 @maxValue(15)
 @description('Device extensionAttribute slot used for the derived Defender for Endpoint check-in value. Set to 0 to disable this enrichment.')
@@ -228,6 +231,7 @@ output INTUNE_DYNAMIC_GROUP_ENABLED string = intuneDynamicGroupEnabled ? 'true' 
 output INTUNE_DYNAMIC_GROUP_NAME string = intuneDynamicGroupName
 output INTUNE_DYNAMIC_GROUP_RULE string = intuneDynamicGroupRule
 output INTUNE_CHECKIN_ATTRIBUTE_NUMBER string = string(intuneCheckInExtensionAttributeNumber)
+output PRIMARY_ARCHIVE_USER_COLLECTION_ENABLED string = primaryArchiveUserCollectionEnabled ? 'true' : 'false'
 output LOGIC_APP_NOTIFICATIONS_ENABLED string = logicAppNotificationsEnabled ? 'true' : 'false'
 output LOGIC_APP_NOTIFICATION_WORKFLOW_NAME string = resources.outputs.LOGIC_APP_NOTIFICATION_WORKFLOW_NAME
 output LOGIC_APP_NOTIFY_ON_FAILURE string = logicAppNotifyOnFailure ? 'true' : 'false'

@@ -10,6 +10,7 @@ param(
     [string] $DeleteEnabled = '__DEVICE_DELETE_ENABLED__',
     [string] $ExcludedDeviceGroupId = '__EXCLUSION_DEVICE_GROUP_ID__',
     [string] $IntuneCheckInAttributeNumber = '__INTUNE_CHECKIN_ATTRIBUTE_NUMBER__',
+    [string] $PrimaryArchiveUserCollectionEnabled = '__PRIMARY_ARCHIVE_USER_COLLECTION_ENABLED__',
     [string] $DefenderCheckInAttributeNumber = '__DEFENDER_CHECKIN_ATTRIBUTE_NUMBER__',
     [string] $AdvancedHuntingEnabled = '__ADVANCED_HUNTING_ENABLED__',
     [string] $AdvancedHuntingLookbackDays = '__ADVANCED_HUNTING_LOOKBACK_DAYS__',
@@ -33,6 +34,10 @@ $script:DefenderResourceUrl = 'https://api.securitycenter.microsoft.com'
 $script:DefenderApiUrl = 'https://api.security.microsoft.com'
 $script:KeyVaultResourceUrl = 'https://vault.azure.net'
 $script:TokenCache = @{}
+$script:ArchiveIndexKind = 'device-archive-index'
+$script:ArchiveIndexSchemaVersion = '1.0'
+$script:ArchiveIndexContentType = 'application/vnd.azd-device-cleanup.archive-index+json;v=1'
+$script:ArchiveIndexMaxBytes = 8192
 
 function Get-RequiredInput {
     param(
@@ -344,6 +349,109 @@ function Get-GraphCollection {
     }
 
     return $items
+}
+
+function Get-BoundedGraphCollection {
+    param(
+        [Parameter(Mandatory = $true)][string] $Uri,
+        [Parameter(Mandatory = $true)][string] $AllowedPath,
+        [int] $MaxPages = 5,
+        [int] $MaxItems = 20,
+        [switch] $StopAfterTwoDistinctIds
+    )
+
+    $token = Get-ManagedIdentityToken -ResourceUrl $script:GraphResourceUrl
+    $items = @()
+    $next = $Uri
+    $visited = @{}
+    $pageCount = 0
+    $distinctIds = @{}
+    while (-not [string]::IsNullOrWhiteSpace($next)) {
+        if ($pageCount -ge $MaxPages) { throw 'Microsoft Graph collection exceeded its page limit.' }
+        if ($visited.ContainsKey($next)) { throw 'Microsoft Graph collection repeated a continuation URI.' }
+        $visited[$next] = $true
+        $parsed = [Uri]::new($next)
+        if ($parsed.Scheme -cne 'https' -or $parsed.Host -ine 'graph.microsoft.com' -or $parsed.Port -ne 443 -or
+            $parsed.AbsolutePath -cne $AllowedPath -or -not [string]::IsNullOrWhiteSpace($parsed.UserInfo) -or
+            -not [string]::IsNullOrWhiteSpace($parsed.Fragment)) {
+            throw 'Microsoft Graph collection continuation URI is invalid.'
+        }
+
+        $response = Invoke-JsonRestMethod -Method 'GET' -Uri $next -AccessToken $token
+        $pageCount++
+        foreach ($item in @($response.value)) {
+            $items += $item
+            if ($items.Count -gt $MaxItems) { throw 'Microsoft Graph collection exceeded its item limit.' }
+            $itemId = [string]$item.id
+            if (-not [string]::IsNullOrWhiteSpace($itemId)) { $distinctIds[$itemId.Trim().ToLowerInvariant()] = $true }
+            if ($StopAfterTwoDistinctIds -and $distinctIds.Count -ge 2) { return $items }
+        }
+        $next = if ($response.PSObject.Properties.Name -contains '@odata.nextLink') { [string]$response.'@odata.nextLink' } else { $null }
+    }
+    return $items
+}
+
+function Get-PrimaryArchiveUser {
+    param(
+        [Parameter(Mandatory = $true)][object] $Device,
+        [Parameter(Mandatory = $true)][bool] $Enabled
+    )
+
+    $result = [ordered]@{ State = 'Disabled'; Id = $null; UserPrincipalName = $null }
+    if (-not $Enabled) { return [pscustomobject]$result }
+    $deviceId = [string]$Device.deviceId
+    if ([string]::IsNullOrWhiteSpace($deviceId) -or $deviceId.Length -gt 128) {
+        $result.State = 'MappingMissing'
+        return [pscustomobject]$result
+    }
+
+    try {
+        $normalizedDeviceId = $deviceId.Trim().ToLowerInvariant()
+        $escapedValue = $normalizedDeviceId.Replace("'", "''")
+        $escapedFilter = [Uri]::EscapeDataString("azureADDeviceId eq '$escapedValue'")
+        $managedUri = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?`$filter=$escapedFilter&`$select=id,azureADDeviceId&`$top=3"
+        $managed = @(Get-BoundedGraphCollection -Uri $managedUri -AllowedPath '/v1.0/deviceManagement/managedDevices' -MaxPages 3 -MaxItems 3)
+        $exact = @($managed | Where-Object {
+                -not [string]::IsNullOrWhiteSpace([string]$_.id) -and
+                ([string]$_.id).Length -le 128 -and
+                ([string]$_.azureADDeviceId).Trim().ToLowerInvariant() -ceq $normalizedDeviceId
+            })
+        if ($managed.Count -ne $exact.Count) { $result.State = 'Conflict'; return [pscustomobject]$result }
+        $distinctManagedIds = @($exact | ForEach-Object { ([string]$_.id).Trim().ToLowerInvariant() } | Select-Object -Unique)
+        if ($distinctManagedIds.Count -eq 0) { $result.State = 'MappingMissing'; return [pscustomobject]$result }
+        if ($distinctManagedIds.Count -ne 1) { $result.State = 'MappingAmbiguous'; return [pscustomobject]$result }
+
+        $managedId = $distinctManagedIds[0]
+        if ($managedId -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') {
+            $result.State = 'Conflict'
+            return [pscustomobject]$result
+        }
+        $userUri = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices/$managedId/users?`$select=id,userPrincipalName&`$top=20"
+        $users = @(Get-BoundedGraphCollection -Uri $userUri -AllowedPath "/v1.0/deviceManagement/managedDevices/$managedId/users" -MaxPages 5 -MaxItems 20 -StopAfterTwoDistinctIds)
+        $byId = @{}
+        foreach ($user in $users) {
+            $id = [string]$user.id
+            if ([string]::IsNullOrWhiteSpace($id) -or $id.Length -gt 128) { $result.State = 'Conflict'; return [pscustomobject]$result }
+            $id = $id.Trim().ToLowerInvariant()
+            if ($id -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') { $result.State = 'Conflict'; return [pscustomobject]$result }
+            $rawUpn = if ($user.PSObject.Properties.Name -contains 'userPrincipalName') { $user.userPrincipalName } else { $null }
+            $upn = if ([string]::IsNullOrWhiteSpace([string]$rawUpn)) { $null } else { ([string]$rawUpn).Trim().ToLowerInvariant() }
+            if ($null -ne $upn -and ($upn.Length -gt 320 -or $upn -notmatch '^[^\s@]+@[^\s@]+$')) { $result.State = 'Conflict'; return [pscustomobject]$result }
+            if ($byId.ContainsKey($id) -and $byId[$id] -cne $upn) { $result.State = 'Conflict'; return [pscustomobject]$result }
+            $byId[$id] = $upn
+            if ($byId.Count -ge 2) { $result.State = 'Multiple'; return [pscustomobject]$result }
+        }
+        if ($byId.Count -eq 0) { $result.State = 'None'; return [pscustomobject]$result }
+        $result.State = 'Single'
+        $result.Id = @($byId.Keys)[0]
+        $result.UserPrincipalName = $byId[$result.Id]
+        return [pscustomobject]$result
+    }
+    catch {
+        if ($_.Exception.Message -like '*page limit*' -or $_.Exception.Message -like '*item limit*') { $result.State = 'Overflow' }
+        else { $result.State = 'Unavailable' }
+        return [pscustomobject]$result
+    }
 }
 
 function Get-DefenderMachines {
@@ -994,7 +1102,7 @@ function Get-LapsArchive {
         [string] $EntraObjectId
     )
 
-    $uri = "https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials/$EntraObjectId?`$select=credentials"
+    $uri = "https://graph.microsoft.com/v1.0/directory/deviceLocalCredentials/${EntraObjectId}?`$select=credentials"
 
     try {
         $raw = Get-GraphObject -Uri $uri
@@ -1152,6 +1260,7 @@ function Build-ArchivePayload {
         [AllowNull()]
         [object] $LapsArchive,
         [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
         [object[]] $BitLockerArchive
     )
 
@@ -1277,7 +1386,12 @@ function Set-KeyVaultArchiveSecret {
         [hashtable] $Tags
     )
 
-    $json = $Payload | ConvertTo-Json -Depth 20 -Compress
+    if ($VaultName.Length -lt 3 -or $VaultName.Length -gt 24 -or $VaultName -notmatch '^[a-z][a-z0-9-]*[a-z0-9]$' -or $VaultName -match '--' -or
+        $SecretName.Length -lt 1 -or $SecretName.Length -gt 127 -or $SecretName -notmatch '^[A-Za-z0-9-]+$') {
+        throw 'Key Vault archive destination is invalid.'
+    }
+    $VaultName = $VaultName.ToLowerInvariant()
+    try { $json = $Payload | ConvertTo-Json -Depth 20 -Compress } catch { throw 'Archive payload serialization failed.' }
     $payloadSize = [Text.Encoding]::UTF8.GetByteCount($json)
     if ($payloadSize -gt 24000) {
         throw "Archive payload for secret '$SecretName' is too large for Azure Key Vault secret storage."
@@ -1291,7 +1405,70 @@ function Set-KeyVaultArchiveSecret {
         tags = $Tags
     }
 
-    Invoke-JsonRestMethod -Method 'PUT' -Uri $uri -AccessToken $token -Body $body | Out-Null
+    try { $response = Invoke-JsonRestMethod -Method 'PUT' -Uri $uri -AccessToken $token -Body $body }
+    catch { throw 'Key Vault archive write failed.' }
+    return ConvertTo-KeyVaultVersionReference -Response $response -VaultName $VaultName -SecretName $SecretName
+}
+
+function ConvertTo-KeyVaultVersionReference {
+    param(
+        [Parameter(Mandatory = $true)][object] $Response,
+        [Parameter(Mandatory = $true)][string] $VaultName,
+        [Parameter(Mandatory = $true)][string] $SecretName
+    )
+
+    $VaultName = $VaultName.ToLowerInvariant()
+    $id = if ($null -ne $Response -and $Response.PSObject.Properties.Name -contains 'id') { [string]$Response.id } else { '' }
+    $parsed = $null
+    try { $parsed = [Uri]::new($id) } catch { $parsed = $null }
+    if ($null -eq $parsed -or $parsed.Scheme -cne 'https' -or $parsed.Port -ne 443 -or
+        $parsed.Host -ine "$VaultName.vault.azure.net" -or -not [string]::IsNullOrWhiteSpace($parsed.UserInfo) -or -not [string]::IsNullOrWhiteSpace($parsed.Query) -or
+        -not [string]::IsNullOrWhiteSpace($parsed.Fragment) -or $parsed.AbsolutePath -notmatch '^/secrets/([^/]+)/([a-fA-F0-9]{32})$' -or
+        $Matches[1] -cne $SecretName) {
+        throw 'Key Vault secret write returned an invalid version reference.'
+    }
+    $version = $Matches[2].ToLowerInvariant()
+    $canonicalId = "https://$VaultName.vault.azure.net/secrets/$SecretName/$version"
+    return [pscustomobject]@{ VaultName = $VaultName; SecretName = $SecretName; Version = $version; Id = $canonicalId }
+}
+
+function Get-ArchiveIndexName {
+    param([Parameter(Mandatory = $true)][string] $ArchiveSecretId)
+    $bytes = [Text.Encoding]::UTF8.GetBytes($ArchiveSecretId)
+    $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+    return "device-archive-index-$hash"
+}
+
+function Assert-ArchiveIndexScalar {
+    param([AllowNull()][object]$Value, [Parameter(Mandatory = $true)][string]$Name, [int]$MaxLength, [switch]$Required)
+    if ($null -eq $Value) { if ($Required) { throw "Archive index field '$Name' is required." }; return }
+    if ($Value -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$Value) -or ([string]$Value).Length -gt $MaxLength) {
+        throw "Archive index field '$Name' is invalid."
+    }
+}
+
+function Set-KeyVaultArchiveIndex {
+    param(
+        [Parameter(Mandatory = $true)][string]$VaultName,
+        [Parameter(Mandatory = $true)][string]$IndexName,
+        [Parameter(Mandatory = $true)][object]$Payload,
+        [Parameter(Mandatory = $true)][hashtable]$Tags
+    )
+    if ($VaultName.Length -lt 3 -or $VaultName.Length -gt 24 -or $VaultName -notmatch '^[a-z][a-z0-9-]*[a-z0-9]$' -or $VaultName -match '--' -or
+        $IndexName -notmatch '^device-archive-index-[a-f0-9]{64}$') { throw 'Key Vault archive index destination is invalid.' }
+    $VaultName = $VaultName.ToLowerInvariant()
+    if ($Tags.Count -gt 15 -or $Tags.ContainsKey('primaryUserPrincipalName')) { throw 'Archive index tags are invalid.' }
+    try { $json = $Payload | ConvertTo-Json -Depth 5 -Compress } catch { throw 'Archive index serialization failed.' }
+    if ([Text.Encoding]::UTF8.GetByteCount($json) -gt $script:ArchiveIndexMaxBytes) { throw 'Archive index payload is too large.' }
+    $uri = "https://$VaultName.vault.azure.net/secrets/${IndexName}?api-version=7.4"
+    $token = Get-ManagedIdentityToken -ResourceUrl $script:KeyVaultResourceUrl
+    try {
+        $response = Invoke-JsonRestMethod -Method 'PUT' -Uri $uri -AccessToken $token -Body @{
+            value = $json; contentType = $script:ArchiveIndexContentType; tags = $Tags
+        }
+    }
+    catch { throw 'Key Vault archive index write failed.' }
+    return ConvertTo-KeyVaultVersionReference -Response $response -VaultName $VaultName -SecretName $IndexName
 }
 
 function Remove-EntraDevice {
@@ -1402,6 +1579,7 @@ function Get-DeviceCleanupSettings {
         DeleteEnabled = Get-BooleanInput -Name 'DeleteEnabled' -Value $DeleteEnabled
         IntuneCheckInAttributeNumber = $resolvedIntuneAttributeNumber
         IntuneCheckInAttributeName = if ($resolvedIntuneAttributeNumber -gt 0) { Get-ExtensionAttributeName -Number $resolvedIntuneAttributeNumber } else { $null }
+        PrimaryArchiveUserCollectionEnabled = Get-BooleanInput -Name 'PrimaryArchiveUserCollectionEnabled' -Value $PrimaryArchiveUserCollectionEnabled
         DefenderCheckInAttributeNumber = $resolvedDefenderAttributeNumber
         DefenderCheckInAttributeName = if ($resolvedDefenderAttributeNumber -gt 0) { Get-ExtensionAttributeName -Number $resolvedDefenderAttributeNumber } else { $null }
         AdvancedHuntingEnabled = $resolvedAdvancedHuntingEnabled
@@ -1677,8 +1855,11 @@ function Save-DeviceArchive {
     )
 
     $secretDisplayName = if ([string]::IsNullOrWhiteSpace($Device.displayName)) { 'unnamed-device' } else { $Device.displayName }
-    $lapsArchive = Get-LapsArchive -EntraObjectId $Device.id
-    $bitLockerArchive = @(Get-BitLockerArchive -DeviceId $Device.deviceId)
+    try {
+        $lapsArchive = Get-LapsArchive -EntraObjectId $Device.id
+        $bitLockerArchive = @(Get-BitLockerArchive -DeviceId $Device.deviceId)
+    }
+    catch { throw 'Archive recovery evidence collection failed.' }
     $archivedAt = (Get-Date).ToUniversalTime().ToString('o')
     $payload = Build-ArchivePayload -Device $Device -ArchivedAt $archivedAt -CleanupRunId $CleanupRunId -Candidate $Candidate -CheckInData $CheckInData -LapsArchive $lapsArchive -BitLockerArchive $bitLockerArchive
     $secretName = New-ArchiveSecretName -Prefix $Settings.SecretPrefix -DisplayName $secretDisplayName -EntraObjectId $Device.id
@@ -1707,13 +1888,80 @@ function Save-DeviceArchive {
         }
     }
 
-    Set-KeyVaultArchiveSecret -VaultName $Settings.VaultName -SecretName $secretName -Payload $payload -Tags $tags
+    $archiveReference = Set-KeyVaultArchiveSecret -VaultName $Settings.VaultName -SecretName $secretName -Payload $payload -Tags $tags
+    try {
+    $primaryEnabled = $false
+    if ($Settings.PSObject.Properties.Name -contains 'PrimaryArchiveUserCollectionEnabled') { $primaryEnabled = [bool]$Settings.PrimaryArchiveUserCollectionEnabled }
+    $primaryUser = Get-PrimaryArchiveUser -Device $Device -Enabled $primaryEnabled
+    $indexPayload = [ordered]@{
+        schemaVersion = $script:ArchiveIndexSchemaVersion
+        kind = $script:ArchiveIndexKind
+        archiveSecretName = $archiveReference.SecretName
+        archiveSecretVersion = $archiveReference.Version
+        archiveSecretId = $archiveReference.Id
+        entraObjectId = ([string]$Device.id).Trim().ToLowerInvariant()
+        deviceId = if ([string]::IsNullOrWhiteSpace([string]$Device.deviceId)) { $null } else { ([string]$Device.deviceId).Trim().ToLowerInvariant() }
+        displayName = if ([string]::IsNullOrWhiteSpace([string]$Device.displayName)) { $null } else { [string]$Device.displayName }
+        serialNumber = if ($null -eq $payload.device.serialNumber -or [string]::IsNullOrWhiteSpace([string]$payload.device.serialNumber)) { $null } else { [string]$payload.device.serialNumber }
+        intuneManagedDeviceId = if ($null -eq $payload.intune -or [string]::IsNullOrWhiteSpace([string]$payload.intune.managedDeviceId)) { $null } else { ([string]$payload.intune.managedDeviceId).Trim().ToLowerInvariant() }
+        defenderMachineId = if ($null -eq $payload.defenderForEndpoint -or [string]::IsNullOrWhiteSpace([string]$payload.defenderForEndpoint.machineId)) { $null } else { ([string]$payload.defenderForEndpoint.machineId).Trim().ToLowerInvariant() }
+        archivedAt = $archivedAt
+        cleanupRunId = $CleanupRunId
+        primaryUserState = $primaryUser.State
+        primaryUserId = $primaryUser.Id
+        primaryUserPrincipalName = $primaryUser.UserPrincipalName
+    }
+    foreach ($bound in @(
+            @{ N='archiveSecretName'; V=$indexPayload.archiveSecretName; M=127; R=$true }, @{ N='archiveSecretVersion'; V=$indexPayload.archiveSecretVersion; M=32; R=$true },
+            @{ N='archiveSecretId'; V=$indexPayload.archiveSecretId; M=512; R=$true }, @{ N='entraObjectId'; V=$indexPayload.entraObjectId; M=128; R=$true },
+            @{ N='deviceId'; V=$indexPayload.deviceId; M=128 }, @{ N='displayName'; V=$indexPayload.displayName; M=256 }, @{ N='serialNumber'; V=$indexPayload.serialNumber; M=256 },
+            @{ N='intuneManagedDeviceId'; V=$indexPayload.intuneManagedDeviceId; M=128 }, @{ N='defenderMachineId'; V=$indexPayload.defenderMachineId; M=128 },
+            @{ N='archivedAt'; V=$indexPayload.archivedAt; M=64; R=$true }, @{ N='cleanupRunId'; V=$indexPayload.cleanupRunId; M=128; R=$true },
+            @{ N='primaryUserState'; V=$indexPayload.primaryUserState; M=32; R=$true }, @{ N='primaryUserId'; V=$indexPayload.primaryUserId; M=128 },
+            @{ N='primaryUserPrincipalName'; V=$indexPayload.primaryUserPrincipalName; M=320 }
+        )) { Assert-ArchiveIndexScalar -Name $bound.N -Value $bound.V -MaxLength $bound.M -Required:($bound.ContainsKey('R') -and [bool]$bound.R) }
+    if ($indexPayload.archiveSecretVersion -notmatch '^[a-f0-9]{32}$') { throw 'Archive index version is invalid.' }
+    if ($indexPayload.entraObjectId -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' -or
+        ($null -ne $indexPayload.deviceId -and $indexPayload.deviceId -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') -or
+        ($null -ne $indexPayload.intuneManagedDeviceId -and $indexPayload.intuneManagedDeviceId -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') -or
+        ($null -ne $indexPayload.defenderMachineId -and $indexPayload.defenderMachineId -notmatch '^[0-9a-f]{40}$')) {
+        throw 'Archive index device identity is invalid.'
+    }
+    if ($indexPayload.primaryUserState -notin @('Disabled','MappingMissing','MappingAmbiguous','None','Single','Multiple','Unavailable','Overflow','Conflict')) { throw 'Archive index primary user state is invalid.' }
+    if ($indexPayload.primaryUserState -ne 'Single' -and ($null -ne $indexPayload.primaryUserId -or $null -ne $indexPayload.primaryUserPrincipalName)) { throw 'Archive index primary user identity is invalid.' }
+    if ($indexPayload.primaryUserState -eq 'Single' -and ($null -eq $indexPayload.primaryUserId -or $indexPayload.primaryUserId -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')) { throw 'Archive index primary user identity is invalid.' }
+    if ($null -ne $indexPayload.primaryUserPrincipalName -and $indexPayload.primaryUserPrincipalName -notmatch '^[^\s@]+@[^\s@]+$') { throw 'Archive index primary user identity is invalid.' }
+    $indexName = Get-ArchiveIndexName -ArchiveSecretId $archiveReference.Id
+    $hash = $indexName.Substring('device-archive-index-'.Length)
+    $indexTags = @{
+        kind=$script:ArchiveIndexKind; schemaVersion=$script:ArchiveIndexSchemaVersion; archiveSecretName=$archiveReference.SecretName
+        archiveSecretVersion=$archiveReference.Version; archiveIdHash=$hash; entraObjectId=$indexPayload.entraObjectId
+        archivedAt=$archivedAt; cleanupRunId=$CleanupRunId; primaryUserState=$primaryUser.State
+    }
+    foreach ($entry in @(
+            @{K='deviceId';V=$indexPayload.deviceId}, @{K='displayName';V=$indexPayload.displayName}, @{K='serialNumber';V=$indexPayload.serialNumber},
+            @{K='intuneManagedDeviceId';V=$indexPayload.intuneManagedDeviceId}, @{K='defenderMachineId';V=$indexPayload.defenderMachineId},
+            @{K='primaryUserId';V=$indexPayload.primaryUserId}
+        )) {
+        if ($null -ne $entry.V) {
+            if (([string]$entry.V).Length -gt 256) { throw "Archive index tag '$($entry.K)' is invalid." }
+            $indexTags[$entry.K] = [string]$entry.V
+        }
+    }
+    $indexReference = Set-KeyVaultArchiveIndex -VaultName $Settings.VaultName -IndexName $indexName -Payload $indexPayload -Tags $indexTags
 
     return [pscustomobject]@{
         CleanupRunId = $CleanupRunId
         SecretName = $secretName
+        SecretVersion = $archiveReference.Version
+        IndexSecretName = $indexReference.SecretName
         LapsCredentialCount = if ($null -eq $lapsArchive) { 0 } else { @($lapsArchive.credentials).Count }
         BitLockerKeyCount = $bitLockerArchive.Count
+    }
+    }
+    catch {
+        $safeRunId = if ($CleanupRunId -match '^[A-Za-z0-9-]{1,128}$') { $CleanupRunId } else { 'unavailable' }
+        throw "Archive index write failed after archive creation. ArchiveSecretName=$($archiveReference.SecretName); ArchiveVersion=$($archiveReference.Version); CleanupRunId=$safeRunId."
     }
 }
 
@@ -1752,6 +2000,7 @@ function Invoke-DeviceCleanupJob {
             disableBatchOverrideCount = $settings.DisableBatchOverrideCount
             exclusionGroupId = $settings.ExclusionGroupId
             intuneCheckInAttributeNumber = $settings.IntuneCheckInAttributeNumber
+            primaryArchiveUserCollectionEnabled = if ($settings.PSObject.Properties.Name -contains 'PrimaryArchiveUserCollectionEnabled') { [bool]$settings.PrimaryArchiveUserCollectionEnabled } else { $false }
             defenderCheckInAttributeNumber = $settings.DefenderCheckInAttributeNumber
             advancedHuntingEnabled = $settings.AdvancedHuntingEnabled
             advancedHuntingLookbackDays = $settings.AdvancedHuntingLookbackDays

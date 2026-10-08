@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "azd-device-cleanup archive metadata index",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "kind", "archiveSecretName", "archiveSecretVersion", "archiveSecretId",
+    "entraObjectId", "deviceId", "displayName", "serialNumber", "intuneManagedDeviceId",
+    "defenderMachineId", "archivedAt", "cleanupRunId", "primaryUserState",
+    "primaryUserId", "primaryUserPrincipalName"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "kind": { "const": "device-archive-index" },
+    "archiveSecretName": { "type": "string", "minLength": 1, "maxLength": 127, "pattern": "^[A-Za-z0-9-]+$" },
+    "archiveSecretVersion": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+    "archiveSecretId": { "type": "string", "maxLength": 512, "pattern": "^https://[a-z](?![a-z0-9-]*--)[a-z0-9-]{1,22}[a-z0-9]\\.vault\\.azure\\.net/secrets/[A-Za-z0-9-]{1,127}/[a-f0-9]{32}$" },
+    "entraObjectId": { "$ref": "#/$defs/guid" },
+    "deviceId": { "$ref": "#/$defs/nullableGuid" },
+    "displayName": { "$ref": "#/$defs/nullableText256" },
+    "serialNumber": { "$ref": "#/$defs/nullableText256" },
+    "intuneManagedDeviceId": { "$ref": "#/$defs/nullableGuid" },
+    "defenderMachineId": { "$ref": "#/$defs/nullableDefenderMachineId" },
+    "archivedAt": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "cleanupRunId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "primaryUserState": {
+      "enum": ["Disabled", "MappingMissing", "MappingAmbiguous", "None", "Single", "Multiple", "Unavailable", "Overflow", "Conflict"]
+    },
+    "primaryUserId": { "$ref": "#/$defs/nullableGuid" },
+    "primaryUserPrincipalName": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "string", "minLength": 1, "maxLength": 320, "pattern": "^[^\\s@]+@[^\\s@]+$" }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "primaryUserState": { "const": "Single" } } },
+      "then": { "properties": { "primaryUserId": { "$ref": "#/$defs/guid" } } },
+      "else": {
+        "properties": {
+          "primaryUserId": { "type": "null" },
+          "primaryUserPrincipalName": { "type": "null" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "guid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "nullableGuid": {
+      "anyOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/guid" }
+      ]
+    },
+    "nullableDefenderMachineId": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      ]
+    },
+    "nullableText256": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "string", "minLength": 1, "maxLength": 256 }
+      ]
+    }
+  }
+}
