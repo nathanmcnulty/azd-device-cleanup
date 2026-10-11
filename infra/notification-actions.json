@@ -15,8 +15,7 @@
         "runtimeConfiguration": {
           "secureData": {
             "properties": [
-              "inputs",
-              "outputs"
+              "inputs"
             ]
           }
         }
@@ -118,14 +117,6 @@
           ]
         },
         "inputs": "@and(not(empty(outputs('Pattern_inputs')?['eventId'])), not(empty(outputs('Pattern_inputs')?['correlationId'])), equals(length(body('Invalid_ID_controls')), 0), equals(length(body('Invalid_namespace_initials')), 0), equals(length(body('Invalid_namespace_segments')), 0), equals(length(body('Invalid_namespace_characters')), 0))"
-      }
-    },
-    "runtimeConfiguration": {
-      "secureData": {
-        "properties": [
-          "inputs",
-          "outputs"
-        ]
       }
     }
   },

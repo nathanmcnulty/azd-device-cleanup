@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "3557467140931152062"
+      "templateHash": "9608422295056211188"
     }
   },
   "parameters": {
@@ -434,7 +434,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.46.1.21595",
-              "templateHash": "4215845692529770993"
+              "templateHash": "11226538174841777157"
             }
           },
           "parameters": {
@@ -662,8 +662,7 @@
                     "runtimeConfiguration": {
                       "secureData": {
                         "properties": [
-                          "inputs",
-                          "outputs"
+                          "inputs"
                         ]
                       }
                     }
@@ -765,14 +764,6 @@
                       ]
                     },
                     "inputs": "@and(not(empty(outputs('Pattern_inputs')?['eventId'])), not(empty(outputs('Pattern_inputs')?['correlationId'])), equals(length(body('Invalid_ID_controls')), 0), equals(length(body('Invalid_namespace_initials')), 0), equals(length(body('Invalid_namespace_segments')), 0), equals(length(body('Invalid_namespace_characters')), 0))"
-                  }
-                },
-                "runtimeConfiguration": {
-                  "secureData": {
-                    "properties": [
-                      "inputs",
-                      "outputs"
-                    ]
                   }
                 }
               },

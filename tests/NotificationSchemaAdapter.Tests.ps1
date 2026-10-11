@@ -150,14 +150,36 @@ Describe 'Compiled provider adapter differential contract' {
             foreach($after in $check.Value.runAfter.PSObject.Properties){$after.Value|Should -Be @('Succeeded')}
         }
     }
-    It 'protects inbound bodies and every temporary pattern input/output in history' {
+    It 'configures documented supported protections for inbound and temporary pattern bodies' {
         $definition.triggers.manual.runtimeConfiguration.secureData.properties|Should -Contain 'inputs'
         $definition.triggers.manual.runtimeConfiguration.secureData.properties|Should -Contain 'outputs'
-        foreach($check in $definition.actions.Check_patterns.actions.PSObject.Properties|Where-Object Name -ne 'Pattern_valid'){
+        @($definition.actions.Check_patterns.PSObject.Properties.Name)|Should -Not -Contain 'runtimeConfiguration'
+        $definition.actions.Check_patterns.actions.Pattern_inputs.type|Should -Be 'Compose'
+        $definition.actions.Check_patterns.actions.Pattern_inputs.runtimeConfiguration.secureData.properties|Should -Be @('inputs')
+        foreach($check in $definition.actions.Check_patterns.actions.PSObject.Properties|Where-Object {$_.Value.type -eq 'Query'}){
             $check.Value.runtimeConfiguration.secureData.properties|Should -Contain 'inputs'
             $check.Value.runtimeConfiguration.secureData.properties|Should -Contain 'outputs'
         }
         $definition.actions.Check_patterns.actions.Pattern_valid.inputs|Should -Not -Match 'triggerBody'
+    }
+    It 'rejects unsupported secure-data configurations in actual action-type fixtures' -ForEach @('Scope','Compose','If','Response') {
+        # Microsoft lists Scope/If unsupported for both, Compose/Response for outputs.
+        function Assert-SupportedHistorySettings($Action) {
+            $configuration=$Action.PSObject.Properties['runtimeConfiguration']
+            if($null -eq $configuration){return}
+            if($Action.type -in @('Scope','If') -and $null -ne $configuration.Value.secureData){throw 'UnsupportedSecureData'}
+            if($Action.type -in @('Compose','Response') -and 'outputs' -in @($configuration.Value.secureData.properties)){throw 'UnsupportedSecureOutputs'}
+        }
+        $actual=switch($PSItem){
+            Scope {$definition.actions.Check_patterns}
+            Compose {$definition.actions.Check_patterns.actions.Pattern_inputs}
+            If {$definition.actions.Validate_envelope}
+            Response {$definition.actions.Validate_envelope.actions.Accept_notification}
+        }
+        {Assert-SupportedHistorySettings $actual}|Should -Not -Throw
+        $fixture=($actual|ConvertTo-Json -Depth 100)|ConvertFrom-Json -Depth 100
+        $fixture|Add-Member -MemberType NoteProperty -Name runtimeConfiguration -Value @{secureData=@{properties=@('inputs','outputs')}} -Force
+        {Assert-SupportedHistorySettings $fixture}|Should -Throw '*UnsupportedSecure*'
     }
     It 'refuses unsupported expression syntax rather than inventing an evaluation result' {
         {Invoke-TestWdlNode (ConvertFrom-TestWdlExpression "@unreviewedFunction('a')") @{}}|Should -Throw
