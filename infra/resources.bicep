@@ -145,6 +145,11 @@ resource schedule 'Microsoft.Automation/automationAccounts/schedules@2024-10-23'
   }
 }
 
+// Canonical contract bytes remain immutable. This solution-owned structural
+// projection inlines its local refs/const; pre-routing actions enforce patterns.
+// Format annotations are not provider assertions. Tests bind the full mapping.
+var providerNotificationSchema = loadJsonContent('notification-schema.json')
+
 resource notificationWorkflow 'Microsoft.Logic/workflows@2019-05-01' = if (logicAppNotificationsEnabled) {
   name: logicAppNotificationWorkflowName
   location: location
@@ -176,90 +181,15 @@ resource notificationWorkflow 'Microsoft.Logic/workflows@2019-05-01' = if (logic
           type: 'Request'
           kind: 'Http'
           operationOptions: 'EnableSchemaValidation'
+          runtimeConfiguration: { secureData: { properties: ['inputs', 'outputs'] } }
           inputs: {
             method: 'POST'
-            schema: loadJsonContent('../contracts/notifications/notification-envelope.schema.json')
+            schema: providerNotificationSchema
           }
         }
       }
-      actions: {
-        Forward_to_downstream_webhook: {
-          type: 'If'
-          expression: {
-            and: [
-              {
-                equals: [
-                  '@parameters(\'forwardNotifications\')'
-                  true
-                ]
-              }
-            ]
-          }
-          actions: {
-            Post_notification: {
-              type: 'Http'
-              operationOptions: 'DisableAsyncPattern'
-              runtimeConfiguration: {
-                secureData: { properties: ['inputs', 'outputs'] }
-              }
-              inputs: {
-                method: 'POST'
-                uri: '@if(equals(toLower(uriScheme(parameters(\'notificationWebhookUrl\'))), \'https\'), parameters(\'notificationWebhookUrl\'), null)'
-                headers: {
-                  'Content-Type': 'application/json'
-                }
-                body: '@triggerBody()'
-              }
-            }
-          }
-          else: {
-            actions: {}
-          }
-          runAfter: {}
-        }
-        Forward_to_teams: {
-          type: 'If'
-          expression: '@not(empty(parameters(\'teamsWebhookUrl\')))'
-          actions: {
-            Post_teams: {
-              type: 'Http'
-              operationOptions: 'DisableAsyncPattern'
-              runtimeConfiguration: {
-                secureData: { properties: ['inputs', 'outputs'] }
-              }
-              inputs: {
-                method: 'POST'
-                uri: '@if(equals(toLower(uriScheme(parameters(\'teamsWebhookUrl\'))), \'https\'), parameters(\'teamsWebhookUrl\'), null)'
-                headers: { 'Content-Type': 'application/json' }
-                body: '@triggerBody()?[\'data\']?[\'teams\']'
-              }
-            }
-          }
-          else: { actions: {} }
-          runAfter: {}
-        }
-        Forward_to_email: {
-          type: 'If'
-          expression: '@not(empty(parameters(\'emailWebhookUrl\')))'
-          actions: {
-            Post_email: {
-              type: 'Http'
-              operationOptions: 'DisableAsyncPattern'
-              runtimeConfiguration: {
-                secureData: { properties: ['inputs', 'outputs'] }
-              }
-              inputs: {
-                method: 'POST'
-                uri: '@if(equals(toLower(uriScheme(parameters(\'emailWebhookUrl\'))), \'https\'), parameters(\'emailWebhookUrl\'), null)'
-                headers: { 'Content-Type': 'application/json' }
-                body: '@triggerBody()?[\'data\']?[\'email\']'
-              }
-            }
-          }
-          else: { actions: {} }
-          runAfter: {}
-        }
-      }
+      // Validation is common; destination routes remain independent siblings.
+      actions: loadJsonContent('notification-actions.json')
       outputs: {
         envelopeRouteStatus: { type: 'String', value: '@coalesce(actions(\'Post_notification\')?[\'status\'], \'Skipped\')' }
         teamsRouteStatus: { type: 'String', value: '@coalesce(actions(\'Post_teams\')?[\'status\'], \'Skipped\')' }

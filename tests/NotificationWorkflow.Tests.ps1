@@ -1,6 +1,7 @@
 Describe 'Compiled notification workflow contract' {
     BeforeAll {
         $root=Split-Path $PSScriptRoot -Parent
+        . (Join-Path $PSScriptRoot 'helpers/NotificationExpressionModel.ps1')
         # Compile the real production Bicep, not a hand-maintained workflow fixture.
         $json=& az bicep build --file (Join-Path $root 'infra/main.bicep') --stdout --only-show-errors
         if($LASTEXITCODE){throw 'Production notification template compilation failed.'}
@@ -10,7 +11,8 @@ Describe 'Compiled notification workflow contract' {
         $script:workflowTemplate=$workflowTemplates[0]
         $script:workflow=@($workflowTemplate.resources|Where-Object type -eq 'Microsoft.Logic/workflows')
         if($workflow.Count -ne 1){throw 'Expected exactly one production notification workflow.'}
-        $script:definition=$workflow[0].properties.definition
+        $script:definition=Resolve-TestCompiledArmValue $workflow[0].properties.definition $workflowTemplate.variables
+        $script:routingActions=$definition.actions.Validate_envelope.actions
         $script:routes=@(
             @{outer='Forward_to_downstream_webhook';post='Post_notification';parameter='notificationWebhookUrl';body='@triggerBody()'},
             @{outer='Forward_to_teams';post='Post_teams';parameter='teamsWebhookUrl';body="@triggerBody()?['data']?['teams']"},
@@ -18,10 +20,11 @@ Describe 'Compiled notification workflow contract' {
         )
     }
     It 'has three sibling routes whose failures cannot block another route by runAfter dependency' {
-        @($definition.actions.PSObject.Properties).Count | Should -Be 3
+        @($routingActions.PSObject.Properties | Where-Object Name -like 'Forward_to_*').Count | Should -Be 3
         foreach($route in $routes){
-            $action=$definition.actions.($route.outer)
-            $action.runAfter.PSObject.Properties.Name.Count | Should -Be 0
+            $action=$routingActions.($route.outer)
+            @($action.runAfter.PSObject.Properties.Name) | Should -Be @('Accept_notification')
+            $action.runAfter.Accept_notification | Should -Be @('Succeeded')
             $action.type | Should -Be 'If'
             $action.else.actions.PSObject.Properties.Name.Count | Should -Be 0
             $action.actions.($route.post).inputs.body | Should -Be $route.body
@@ -31,7 +34,7 @@ Describe 'Compiled notification workflow contract' {
         foreach($route in $routes){
             $definition.parameters.($route.parameter).type | Should -Be 'SecureString'
             $definition.parameters.($route.parameter).defaultValue | Should -Be ''
-            $post=$definition.actions.($route.outer).actions.($route.post)
+            $post=$routingActions.($route.outer).actions.($route.post)
             $post.inputs.method | Should -Be 'POST'
             $post.inputs.uri | Should -Match 'uriScheme\(parameters'
             $post.inputs.uri | Should -Match "'https'"
@@ -46,10 +49,10 @@ Describe 'Compiled notification workflow contract' {
         $template.parameters.logicAppTeamsWebhookUrl.defaultValue | Should -Be ''
         $template.parameters.logicAppEmailWebhookUrl.defaultValue | Should -Be ''
         $workflow[0].condition | Should -Be "[parameters('logicAppNotificationsEnabled')]"
-        $definition.actions.Forward_to_teams.expression | Should -Be "@not(empty(parameters('teamsWebhookUrl')))"
-        $definition.actions.Forward_to_email.expression | Should -Be "@not(empty(parameters('emailWebhookUrl')))"
+        $routingActions.Forward_to_teams.expression | Should -Be "@not(empty(parameters('teamsWebhookUrl')))"
+        $routingActions.Forward_to_email.expression | Should -Be "@not(empty(parameters('emailWebhookUrl')))"
     }
-    It 'embeds the exact vendored envelope schema and hashes both immutable component files' {
+    It 'uses a provider structural projection while preserving both immutable component files' {
         $definition.triggers.manual.operationOptions | Should -Be 'EnableSchemaValidation'
         $definition.triggers.manual.inputs.method | Should -Be 'POST'
         $schema=Get-Content (Join-Path $root 'contracts/notifications/notification-envelope.schema.json') -Raw|ConvertFrom-Json -Depth 100
@@ -60,7 +63,10 @@ Describe 'Compiled notification workflow contract' {
             if($null -eq $schemaVariable){throw 'Missing compiled trigger schema variable.'}
             $compiledSchema=$schemaVariable.Value
         }
-        ($compiledSchema|ConvertTo-Json -Depth 100 -Compress)|Should -Be ($schema|ConvertTo-Json -Depth 100 -Compress)
+        @($compiledSchema.required) | Should -Be @($schema.required)
+        @($compiledSchema.properties.schemaVersion.enum) | Should -Be @($schema.properties.schemaVersion.const)
+        $compiledSchema.PSObject.Properties.Name | Should -Not -Contain '$defs'
+        ($compiledSchema|ConvertTo-Json -Depth 100 -Compress) | Should -Not -Match '"\$ref"|"pattern"|"const"|"format"'
         $lock=Get-Content (Join-Path $root 'azd-components.lock.json') -Raw|ConvertFrom-Json -Depth 100
         $lock.components.Count | Should -Be 1
         $lock.components[0].id | Should -Be 'notification-contracts'

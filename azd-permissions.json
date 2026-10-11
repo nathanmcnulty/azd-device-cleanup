@@ -134,7 +134,7 @@
       "scope": "solution-archive-key-vault",
       "rationale": "Create versioned recovery archives and their version-bound metadata indexes.",
       "evidenceState": "code",
-      "evidence": [{"path": "infra/resources.bicep", "sha256": "9826850308491e487422f8c9a201a6875447547058ffef7175cb13e2afc16234"}]
+      "evidence": [{"path": "infra/resources.bicep", "sha256": "0831b9ea6c2cc4fc9535597b5c0c4dff3848f70032eebf6b089bd887f5821374"}]
     },
     {
       "resource": "https://vault.azure.net",

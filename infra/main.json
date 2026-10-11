@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "2498035884642083711"
+      "templateHash": "3557467140931152062"
     }
   },
   "parameters": {
@@ -434,7 +434,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.46.1.21595",
-              "templateHash": "13645964290128598863"
+              "templateHash": "4215845692529770993"
             }
           },
           "parameters": {
@@ -561,8 +561,6 @@
           },
           "variables": {
             "$fxv#0": {
-              "$schema": "https://json-schema.org/draft/2020-12/schema",
-              "title": "azd notification envelope",
               "type": "object",
               "additionalProperties": false,
               "required": [
@@ -579,20 +577,25 @@
               ],
               "properties": {
                 "schemaVersion": {
-                  "const": "1.0"
+                  "enum": [
+                    "1.0"
+                  ]
                 },
                 "eventId": {
-                  "$ref": "#/$defs/eventId"
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 },
                 "eventType": {
-                  "$ref": "#/$defs/namespacedName"
+                  "maxLength": 256,
+                  "type": "string"
                 },
                 "source": {
-                  "$ref": "#/$defs/namespacedName"
+                  "maxLength": 256,
+                  "type": "string"
                 },
                 "occurredAt": {
-                  "type": "string",
-                  "format": "date-time"
+                  "type": "string"
                 },
                 "severity": {
                   "enum": [
@@ -604,61 +607,342 @@
                   ]
                 },
                 "correlationId": {
-                  "$ref": "#/$defs/eventId"
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 },
                 "isTest": {
                   "type": "boolean"
                 },
                 "environment": {
-                  "$ref": "#/$defs/environment"
-                },
-                "data": {
-                  "type": "object"
-                }
-              },
-              "$defs": {
-                "eventId": {
-                  "type": "string",
-                  "pattern": "^[^\\u0000-\\u001F]+$",
-                  "minLength": 1,
-                  "maxLength": 256
-                },
-                "namespacedName": {
-                  "type": "string",
-                  "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z][A-Za-z0-9]*)+$",
-                  "maxLength": 256
-                },
-                "environment": {
-                  "type": "object",
-                  "additionalProperties": false,
                   "required": [
                     "name",
                     "tenantId"
                   ],
+                  "type": "object",
+                  "additionalProperties": false,
                   "properties": {
                     "name": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128
                     },
-                    "tenantId": {
-                      "type": "string",
-                      "format": "uuid"
-                    },
-                    "subscriptionId": {
-                      "type": "string",
-                      "format": "uuid"
-                    },
                     "resourceGroup": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 256
+                    },
+                    "subscriptionId": {
+                      "type": "string"
+                    },
+                    "tenantId": {
+                      "type": "string"
                     }
                   }
+                },
+                "data": {
+                  "type": "object"
                 }
               }
             },
-            "keyVaultSecretsOfficerRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7')]"
+            "$fxv#1": {
+              "Check_patterns": {
+                "type": "Scope",
+                "runAfter": {},
+                "actions": {
+                  "Pattern_inputs": {
+                    "type": "Compose",
+                    "runAfter": {},
+                    "inputs": {
+                      "eventId": "@if(endsWith(triggerBody()?['eventId'], decodeUriComponent('%0A')), substring(triggerBody()?['eventId'], 0, sub(length(triggerBody()?['eventId']), 1)), triggerBody()?['eventId'])",
+                      "correlationId": "@if(endsWith(triggerBody()?['correlationId'], decodeUriComponent('%0A')), substring(triggerBody()?['correlationId'], 0, sub(length(triggerBody()?['correlationId']), 1)), triggerBody()?['correlationId'])",
+                      "eventType": "@if(endsWith(triggerBody()?['eventType'], decodeUriComponent('%0A')), substring(triggerBody()?['eventType'], 0, sub(length(triggerBody()?['eventType']), 1)), triggerBody()?['eventType'])",
+                      "source": "@if(endsWith(triggerBody()?['source'], decodeUriComponent('%0A')), substring(triggerBody()?['source'], 0, sub(length(triggerBody()?['source']), 1)), triggerBody()?['source'])"
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs",
+                          "outputs"
+                        ]
+                      }
+                    }
+                  },
+                  "Invalid_ID_controls": {
+                    "type": "Query",
+                    "runAfter": {
+                      "Pattern_inputs": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "from": "@range(0, 32)",
+                      "where": "@or(contains(outputs('Pattern_inputs')?['eventId'], decodeUriComponent(concat('%', substring('000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F', mul(item(), 2), 2)))), contains(outputs('Pattern_inputs')?['correlationId'], decodeUriComponent(concat('%', substring('000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F', mul(item(), 2), 2)))))"
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs",
+                          "outputs"
+                        ]
+                      }
+                    }
+                  },
+                  "Invalid_namespace_initials": {
+                    "type": "Query",
+                    "runAfter": {
+                      "Pattern_inputs": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "from": "@createArray(outputs('Pattern_inputs')?['eventType'], outputs('Pattern_inputs')?['source'])",
+                      "where": "@or(less(length(split(item(), '.')), 2), not(contains('abcdefghijklmnopqrstuvwxyz', substring(concat(item(), ' '), 0, 1))))"
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs",
+                          "outputs"
+                        ]
+                      }
+                    }
+                  },
+                  "Invalid_namespace_segments": {
+                    "type": "Query",
+                    "runAfter": {
+                      "Pattern_inputs": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "from": "@union(skip(split(outputs('Pattern_inputs')?['eventType'], '.'), 1), skip(split(outputs('Pattern_inputs')?['source'], '.'), 1))",
+                      "where": "@not(contains('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', substring(concat(item(), ' '), 0, 1)))"
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs",
+                          "outputs"
+                        ]
+                      }
+                    }
+                  },
+                  "Invalid_namespace_characters": {
+                    "type": "Query",
+                    "runAfter": {
+                      "Pattern_inputs": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": {
+                      "from": "@range(0, length(concat(outputs('Pattern_inputs')?['eventType'], outputs('Pattern_inputs')?['source'])))",
+                      "where": "@not(contains('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.', substring(concat(outputs('Pattern_inputs')?['eventType'], outputs('Pattern_inputs')?['source']), item(), 1)))"
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs",
+                          "outputs"
+                        ]
+                      }
+                    }
+                  },
+                  "Pattern_valid": {
+                    "type": "Compose",
+                    "runAfter": {
+                      "Invalid_namespace_segments": [
+                        "Succeeded"
+                      ],
+                      "Invalid_namespace_initials": [
+                        "Succeeded"
+                      ],
+                      "Invalid_ID_controls": [
+                        "Succeeded"
+                      ],
+                      "Invalid_namespace_characters": [
+                        "Succeeded"
+                      ]
+                    },
+                    "inputs": "@and(not(empty(outputs('Pattern_inputs')?['eventId'])), not(empty(outputs('Pattern_inputs')?['correlationId'])), equals(length(body('Invalid_ID_controls')), 0), equals(length(body('Invalid_namespace_initials')), 0), equals(length(body('Invalid_namespace_segments')), 0), equals(length(body('Invalid_namespace_characters')), 0))"
+                  }
+                },
+                "runtimeConfiguration": {
+                  "secureData": {
+                    "properties": [
+                      "inputs",
+                      "outputs"
+                    ]
+                  }
+                }
+              },
+              "Validate_envelope": {
+                "type": "If",
+                "runAfter": {
+                  "Check_patterns": [
+                    "Succeeded"
+                  ]
+                },
+                "actions": {
+                  "Forward_to_downstream_webhook": {
+                    "type": "If",
+                    "expression": {
+                      "and": [
+                        {
+                          "equals": [
+                            "@parameters('forwardNotifications')",
+                            true
+                          ]
+                        }
+                      ]
+                    },
+                    "actions": {
+                      "Post_notification": {
+                        "type": "Http",
+                        "operationOptions": "DisableAsyncPattern",
+                        "runtimeConfiguration": {
+                          "secureData": {
+                            "properties": [
+                              "inputs",
+                              "outputs"
+                            ]
+                          }
+                        },
+                        "inputs": {
+                          "method": "POST",
+                          "uri": "@if(equals(toLower(uriScheme(parameters('notificationWebhookUrl'))), 'https'), parameters('notificationWebhookUrl'), null)",
+                          "headers": {
+                            "Content-Type": "application/json"
+                          },
+                          "body": "@triggerBody()"
+                        }
+                      }
+                    },
+                    "else": {
+                      "actions": {}
+                    },
+                    "runAfter": {
+                      "Accept_notification": [
+                        "Succeeded"
+                      ]
+                    }
+                  },
+                  "Forward_to_teams": {
+                    "type": "If",
+                    "expression": "@not(empty(parameters('teamsWebhookUrl')))",
+                    "actions": {
+                      "Post_teams": {
+                        "type": "Http",
+                        "operationOptions": "DisableAsyncPattern",
+                        "runtimeConfiguration": {
+                          "secureData": {
+                            "properties": [
+                              "inputs",
+                              "outputs"
+                            ]
+                          }
+                        },
+                        "inputs": {
+                          "method": "POST",
+                          "uri": "@if(equals(toLower(uriScheme(parameters('teamsWebhookUrl'))), 'https'), parameters('teamsWebhookUrl'), null)",
+                          "headers": {
+                            "Content-Type": "application/json"
+                          },
+                          "body": "@triggerBody()?['data']?['teams']"
+                        }
+                      }
+                    },
+                    "else": {
+                      "actions": {}
+                    },
+                    "runAfter": {
+                      "Accept_notification": [
+                        "Succeeded"
+                      ]
+                    }
+                  },
+                  "Forward_to_email": {
+                    "type": "If",
+                    "expression": "@not(empty(parameters('emailWebhookUrl')))",
+                    "actions": {
+                      "Post_email": {
+                        "type": "Http",
+                        "operationOptions": "DisableAsyncPattern",
+                        "runtimeConfiguration": {
+                          "secureData": {
+                            "properties": [
+                              "inputs",
+                              "outputs"
+                            ]
+                          }
+                        },
+                        "inputs": {
+                          "method": "POST",
+                          "uri": "@if(equals(toLower(uriScheme(parameters('emailWebhookUrl'))), 'https'), parameters('emailWebhookUrl'), null)",
+                          "headers": {
+                            "Content-Type": "application/json"
+                          },
+                          "body": "@triggerBody()?['data']?['email']"
+                        }
+                      }
+                    },
+                    "else": {
+                      "actions": {}
+                    },
+                    "runAfter": {
+                      "Accept_notification": [
+                        "Succeeded"
+                      ]
+                    }
+                  },
+                  "Accept_notification": {
+                    "type": "Response",
+                    "runAfter": {},
+                    "inputs": {
+                      "statusCode": 202,
+                      "body": {
+                        "status": "Accepted"
+                      }
+                    },
+                    "kind": "Http"
+                  }
+                },
+                "else": {
+                  "actions": {
+                    "Reject_notification": {
+                      "type": "Response",
+                      "runAfter": {},
+                      "inputs": {
+                        "statusCode": 400,
+                        "body": {
+                          "error": "InvalidNotificationEnvelope"
+                        }
+                      },
+                      "kind": "Http"
+                    }
+                  }
+                },
+                "expression": "@equals(outputs('Pattern_valid'), true)"
+              },
+              "Validation_error_response": {
+                "type": "Response",
+                "runAfter": {
+                  "Check_patterns": [
+                    "Failed",
+                    "TimedOut"
+                  ]
+                },
+                "inputs": {
+                  "statusCode": 503,
+                  "body": {
+                    "error": "NotificationValidationUnavailable"
+                  }
+                },
+                "kind": "Http"
+              }
+            },
+            "keyVaultSecretsOfficerRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7')]",
+            "providerNotificationSchema": "[variables('$fxv#0')]"
           },
           "resources": [
             {
@@ -787,113 +1071,21 @@
                       "type": "Request",
                       "kind": "Http",
                       "operationOptions": "EnableSchemaValidation",
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs",
+                            "outputs"
+                          ]
+                        }
+                      },
                       "inputs": {
                         "method": "POST",
-                        "schema": "[variables('$fxv#0')]"
+                        "schema": "[variables('providerNotificationSchema')]"
                       }
                     }
                   },
-                  "actions": {
-                    "Forward_to_downstream_webhook": {
-                      "type": "If",
-                      "expression": {
-                        "and": [
-                          {
-                            "equals": [
-                              "@parameters('forwardNotifications')",
-                              true
-                            ]
-                          }
-                        ]
-                      },
-                      "actions": {
-                        "Post_notification": {
-                          "type": "Http",
-                          "operationOptions": "DisableAsyncPattern",
-                          "runtimeConfiguration": {
-                            "secureData": {
-                              "properties": [
-                                "inputs",
-                                "outputs"
-                              ]
-                            }
-                          },
-                          "inputs": {
-                            "method": "POST",
-                            "uri": "@if(equals(toLower(uriScheme(parameters('notificationWebhookUrl'))), 'https'), parameters('notificationWebhookUrl'), null)",
-                            "headers": {
-                              "Content-Type": "application/json"
-                            },
-                            "body": "@triggerBody()"
-                          }
-                        }
-                      },
-                      "else": {
-                        "actions": {}
-                      },
-                      "runAfter": {}
-                    },
-                    "Forward_to_teams": {
-                      "type": "If",
-                      "expression": "@not(empty(parameters('teamsWebhookUrl')))",
-                      "actions": {
-                        "Post_teams": {
-                          "type": "Http",
-                          "operationOptions": "DisableAsyncPattern",
-                          "runtimeConfiguration": {
-                            "secureData": {
-                              "properties": [
-                                "inputs",
-                                "outputs"
-                              ]
-                            }
-                          },
-                          "inputs": {
-                            "method": "POST",
-                            "uri": "@if(equals(toLower(uriScheme(parameters('teamsWebhookUrl'))), 'https'), parameters('teamsWebhookUrl'), null)",
-                            "headers": {
-                              "Content-Type": "application/json"
-                            },
-                            "body": "@triggerBody()?['data']?['teams']"
-                          }
-                        }
-                      },
-                      "else": {
-                        "actions": {}
-                      },
-                      "runAfter": {}
-                    },
-                    "Forward_to_email": {
-                      "type": "If",
-                      "expression": "@not(empty(parameters('emailWebhookUrl')))",
-                      "actions": {
-                        "Post_email": {
-                          "type": "Http",
-                          "operationOptions": "DisableAsyncPattern",
-                          "runtimeConfiguration": {
-                            "secureData": {
-                              "properties": [
-                                "inputs",
-                                "outputs"
-                              ]
-                            }
-                          },
-                          "inputs": {
-                            "method": "POST",
-                            "uri": "@if(equals(toLower(uriScheme(parameters('emailWebhookUrl'))), 'https'), parameters('emailWebhookUrl'), null)",
-                            "headers": {
-                              "Content-Type": "application/json"
-                            },
-                            "body": "@triggerBody()?['data']?['email']"
-                          }
-                        }
-                      },
-                      "else": {
-                        "actions": {}
-                      },
-                      "runAfter": {}
-                    }
-                  },
+                  "actions": "[variables('$fxv#1')]",
                   "outputs": {
                     "envelopeRouteStatus": {
                       "type": "String",

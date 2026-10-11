@@ -1,2 +1,5 @@
 # Preserve immutable vendored schema bytes across Windows and Linux checkouts.
 /contracts/notifications/*.json text eol=lf
+# The permission manifest binds the published raw Git bytes of this source.
+/infra/resources.bicep text eol=lf
+/infra/notification-*.json text eol=lf
