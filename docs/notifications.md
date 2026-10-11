@@ -34,3 +34,18 @@ Offline tests invoke the real producer and dispatcher with secret canaries, insp
 
 
 The exact published adapter revision `bf66961ebbbb525839fa5ab04bdde31f45d942cc` also returned HTTP400 from Workflow Validate (receipt SHA256 `08DFC1451935DEC3B652B959E959635B3E7F4AA812F5C563DE0F19875B53A3C6`). The closed diagnostic recorded an unknown provider code and a generic pattern mention; it did not establish the rejection cause. The sole virtual workflow returned404 before/after, with existing-group metadata and default context unchanged. Subsequent primary-document review identified unsupported secure-data settings on Scope and Compose. This compatibility repair removes Scope settings and uses Compose secure inputs alone while preserving Query/HTTP/trigger protections and every expression, schema assertion and dispatch dependency. It addresses a documented configuration incompatibility, not a proven HTTP400 cause; native definition/deployment and protected-history acceptance are still pending. The amended registered suite passes295/295 on PowerShell7.6.6, with no failed/skipped/not-run tests and fresh Bicep0.46.1 ARM parity; independent review of this repair is pending. No native calls were made during this repair.
+
+## Repaired definition acceptance
+
+The exact repaired definition from `49f0c712bab7ad72e78593addaee4df4b5e9a8f6`
+passed Azure Workflow Validate with HTTP 200. Its definition SHA-256 is
+`8CC937243A3D1753ADA4AC927B5C3515CAD5BFC8C3C11A36B7B102373D8FCD1C`.
+The independently reviewed diagnostic used no resource mutations; the exact
+virtual workflow was absent before and after, and the group/default context
+was unchanged. Earlier HTTP 400 receipts remain preserved; their specific
+cause is unproven.
+
+This is definition acceptance. Native schema and pattern enforcement, Unicode
+code-point boundaries, protected history, route status/output expressions,
+sibling failure independence, and recipient-visible delivery still need proof.
+CLEAN-007 remains proposed.
