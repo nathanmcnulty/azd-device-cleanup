@@ -136,3 +136,40 @@ Independent terminal review SHA-256:
 `700A874285877FB3123B86AC20FF5E1736C67124EE14BF7110AB3996957A88AA`.
 All earlier attempts remain preserved. CLEAN-007 remains proposed with its
 original acceptance and remaining output/runtime/projection/history/delivery gates.
+
+## Deferred outputs and receiver proof in the fourth attempt
+
+The fourth independently reviewed synthetic attempt on 2026-10-11 retained one
+RouteA HTTP202/native-version-bound accepted run and all three exact child
+statuses: `Post_notification=Failed`, `Post_teams=Succeeded` and
+`Post_email=Skipped`. Source `49f0c712bab7ad72e78593addaee4df4b5e9a8f6`
+remained unchanged.
+
+All three declared output entries had exact String type, a missing value field
+and no error field. These `MissingValue` observations stayed failed output
+qualifications. The bounded harness deferred them only to collect independent
+evidence; it did not infer or substitute evaluated values.
+
+At `ReceiverProjections`, the attempt stopped with `UnclassifiedRuntimeFailure`
+before any completed receiver-attempt hash. The historical cause is unknown.
+No receiver hashes qualified, RouteA remains incomplete and nineteen cases
+did not run. `receiverAccounting=NotEnumeratedAfterDispatch` means its zero
+receiver counter is stale, rather than proof of zero receiver work.
+
+Final proof counters remained `PendingFinalSourceBoundAggregation` with
+`requiredOutputsComplete=false`. The zero final deferred-pair counter is not
+an aggregation of the three separately recorded per-case deferrals. Native
+acceptance, evaluated outputs, projection qualification, protected history
+and delivery remain unproven.
+
+Reviewed cleanup recorded one acknowledged exact owned-group DELETE, four
+exact final HTTP404 observations and unchanged default context, with
+twenty-one inherited roles untouched and zero owned/outside roles recorded.
+These are scoped bound harness observations, not independent fresh API reads
+or a broader absence claim.
+
+Receipt SHA-256: `9E504465662663F023E90014B853F31F5F4ED5BF874425E2BED51FAE7FC16BF0`.
+Independent terminal review SHA-256:
+`FBB6708341133A7949F37CCF6E9F864ED7FE24B7118382299923A12EF584094E`.
+All earlier attempts remain preserved. CLEAN-007 remains proposed with its
+original acceptance and remaining output/runtime/projection/history/delivery gates.
