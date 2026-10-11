@@ -75,3 +75,32 @@ Independent terminal review SHA-256:
 `F0CB4BD8008A37CB810BCEA89D87A98373CFC809AD1BF851AE92462C80B01006`.
 Prior failed artifacts remain preserved. CLEAN-007 remains proposed with its
 original acceptance gates and the runtime/delivery proof still outstanding.
+
+## Partial runtime observation
+
+A second independently reviewed attempt on 2026-10-11 used the unchanged
+source `49f0c712bab7ad72e78593addaee4df4b5e9a8f6`. One RouteA candidate
+callback returned HTTP202 and produced a native-version-bound run with
+`observedAccepted=true`. Exact scoped action history recorded
+`Post_notification=Failed`, `Post_teams=Succeeded` and `Post_email=Skipped`.
+
+The attempt then stopped with `UnclassifiedRuntimeFailure` before output and
+projection qualification. Its cause remains unproven; the reused
+`CandidateCallback` stage does not identify the failing operation. RouteA is
+incomplete and nineteen cases did not run. Child/output status and
+receiver-attempt evidence arrays are empty. `receiverRuns=0` is a stale
+pre-case counter, not proof of zero actual receiver work. No receiver hashes,
+full native contract suite, output/projection acceptance, recipient delivery
+or protected-history proof was obtained.
+
+Reviewed cleanup recorded one acknowledged exact owned-group DELETE and four
+exact final HTTP404 observations, with the default context unchanged.
+Twenty-one inherited roles were counted and untouched; zero owned/outside
+roles were recorded. These are bound harness observations, not independent
+fresh API readbacks or a broader absence claim.
+
+Receipt SHA-256: `302E37A758DF74758CF5C30516A7A53699B9BE476293119FF944CC6CE5BA920B`.
+Independent terminal review SHA-256:
+`BA55A55665499C05754C485ADD67D0E556EF84AB61A4AE1EE49D972C9BFB7B2B`.
+The earlier attempts remain preserved. CLEAN-007 remains proposed with its
+original acceptance and remaining native/runtime/delivery gates.
