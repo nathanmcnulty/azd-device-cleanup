@@ -71,6 +71,9 @@
     "intuneCheckInExtensionAttributeNumber": {
       "value": 14
     },
+    "primaryArchiveUserCollectionEnabled": {
+      "value": false
+    },
     "intuneDynamicGroupEnabled": {
       "value": true
     },

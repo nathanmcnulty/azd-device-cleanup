@@ -20,7 +20,7 @@ Install:
 
 - [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)
-- PowerShell 7
+- PowerShell 7.6 or later
 
 Use an Azure deployment operator who can deploy the resources and create Azure role assignments, and a feature operator who can create or update the configured Entra groups. Some environments already have the required Microsoft Graph permissions consented. If Graph consent has not been completed previously, the deployment may require a **Global Administrator or Privileged Role Administrator**. Defender for Endpoint follows its own consent path. Review [identity and authentication](docs/identity-and-authentication.md) for the exact permissions and role boundaries before production deployment.
 
@@ -53,7 +53,7 @@ flowchart LR
 
 The Automation Account uses a system-assigned managed identity. It evaluates the newest available heartbeat, writes derived Intune and Defender state to configurable device extension attributes, and disables qualifying devices. When deletion is explicitly enabled, it archives recovery evidence before deleting the Entra device.
 
-The archive contains privileged recovery material. Human recovery access is assigned through the configured recovery group, not directly to the deploying user. See [architecture](docs/architecture.md) and [archive and recovery](docs/archive-and-recovery.md).
+The archive contains privileged recovery material. A separate version-bound metadata index supports exact recovery and optional primary-user lookup without putting a UPN in Key Vault tags. Primary-user collection is disabled by default. Human recovery access is assigned through the configured recovery group, not directly to the deploying user. See [architecture](docs/architecture.md) and [archive and recovery](docs/archive-and-recovery.md).
 
 ## Important choices
 

@@ -32,6 +32,7 @@ Describe 'Preflight Automation job does not mutate devices' {
         $parameters.DisableEnabled | Should -Be 'false'
         $parameters.DeleteEnabled | Should -Be 'false'
         $parameters.IntuneCheckInAttributeNumber | Should -Be '0'
+        $parameters.PrimaryArchiveUserCollectionEnabled | Should -Be 'false'
         $parameters.DefenderCheckInAttributeNumber | Should -Be '0'
         $parameters.AdvancedHuntingEnabled | Should -Be 'true'
         $parameters.NotifyOnNoAction | Should -Be 'true'

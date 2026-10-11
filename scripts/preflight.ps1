@@ -5,6 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'PermissionRequirements.ps1')
 
 function Start-PreflightAutomationJob {
   param(
@@ -21,6 +22,7 @@ function Start-PreflightAutomationJob {
     DisableEnabled = 'false'
     DeleteEnabled = 'false'
     IntuneCheckInAttributeNumber = '0'
+    PrimaryArchiveUserCollectionEnabled = 'false'
     DefenderCheckInAttributeNumber = '0'
     AdvancedHuntingEnabled = if ($AdvancedHuntingEnabled) { 'true' } else { 'false' }
     NotifyOnNoAction = if ($LogicAppNotificationsEnabled) { 'true' } else { 'false' }
@@ -94,7 +96,7 @@ function Get-OptionalEnvironmentValue {
     [string] $Default = ''
   )
 
-  if (-not $EnvironmentValues.ContainsKey($Name)) {
+  if (-not $EnvironmentValues.ContainsKey($Name) -or [string]::IsNullOrWhiteSpace($EnvironmentValues[$Name])) {
     return $Default
   }
 
@@ -538,6 +540,7 @@ $advancedHuntingEnabled = ConvertTo-BooleanValue -Name 'ADVANCED_HUNTING_ENABLED
 $intuneDynamicGroupEnabled = ConvertTo-BooleanValue -Name 'INTUNE_DYNAMIC_GROUP_ENABLED' -Value (Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'INTUNE_DYNAMIC_GROUP_ENABLED')
 $defenderDynamicGroupEnabled = ConvertTo-BooleanValue -Name 'DEFENDER_DYNAMIC_GROUP_ENABLED' -Value (Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'DEFENDER_DYNAMIC_GROUP_ENABLED')
 $intuneCheckInAttributeNumber = [int](Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'INTUNE_CHECKIN_ATTRIBUTE_NUMBER')
+$primaryArchiveUserCollectionEnabled = ConvertTo-BooleanValue -Name 'PRIMARY_ARCHIVE_USER_COLLECTION_ENABLED' -Value (Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'PRIMARY_ARCHIVE_USER_COLLECTION_ENABLED' -Default 'false')
 $defenderCheckInAttributeNumber = [int](Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'DEFENDER_CHECKIN_ATTRIBUTE_NUMBER')
 $logicAppNotificationsEnabled = ConvertTo-BooleanValue -Name 'LOGIC_APP_NOTIFICATIONS_ENABLED' -Value (Get-RequiredEnvironmentValue -EnvironmentValues $envValues -Name 'LOGIC_APP_NOTIFICATIONS_ENABLED')
 $logicAppNotificationWorkflowName = Get-OptionalEnvironmentValue -EnvironmentValues $envValues -Name 'LOGIC_APP_NOTIFICATION_WORKFLOW_NAME'
@@ -555,18 +558,7 @@ Connect-AzPowerShellFromCli -SubscriptionId $subscriptionId -TenantId $tenantId
 
 $graphSp = Get-ServicePrincipalInfo -AppId '00000003-0000-0000-c000-000000000000'
 $defenderSp = Get-ServicePrincipalInfo -AppId 'fc780465-2017-40d4-a0c5-307022471b92'
-$requiredGraphRoles = @(
-  'Device.Read.All',
-  'Device.ReadWrite.All',
-  'Group.Read.All',
-  'GroupMember.Read.All',
-  'DeviceLocalCredential.Read.All',
-  'BitlockerKey.Read.All',
-  'DeviceManagementManagedDevices.Read.All'
-)
-if ($advancedHuntingEnabled) {
-  $requiredGraphRoles += 'ThreatHunting.Read.All'
-}
+$requiredGraphRoles = @(Get-RequiredGraphPermissionNames -IntuneCheckInAttributeNumber $intuneCheckInAttributeNumber -PrimaryArchiveUserCollectionEnabled $primaryArchiveUserCollectionEnabled -AdvancedHuntingEnabled $advancedHuntingEnabled)
 Assert-AppRoleAssignments -PrincipalId $automationPrincipalId -ResourceServicePrincipal $graphSp -RequiredRoles $requiredGraphRoles
 if ($defenderCheckInAttributeNumber -gt 0) {
   Assert-AppRoleAssignments -PrincipalId $automationPrincipalId -ResourceServicePrincipal $defenderSp -RequiredRoles @(

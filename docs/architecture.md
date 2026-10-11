@@ -23,8 +23,10 @@ flowchart LR
     B --> F[Run optional Graph advanced hunting query]
     B --> G[Update device extensionAttributes]
     B --> H[Get LAPS and BitLocker data]
-    B --> I[Write archive to Key Vault]
-    B --> J[Disable or delete device]
+    B --> I[Write versioned archive to Key Vault]
+    I --> P[Write version-bound metadata index]
+    P --> J[Delete device]
+    B --> J[Disable device]
     B --> N[Post cleanup summary to Logic App]
     K[Microsoft Graph] --> B
     L[Defender API] --> B
@@ -37,7 +39,7 @@ flowchart LR
 3. The same post-provision step publishes `runbooks/DeviceCleanup.ps1`, stamps in the environment-specific defaults, and links it to the Automation schedule.
 4. The runbook disables devices at the first threshold, then archives and deletes only devices that are already disabled and have crossed the later threshold.
 
-Missing LAPS or BitLocker data is treated as expected. Retrieval or Key Vault write failures block deletion for that device, record a partial-run failure, and do not prevent the runbook from processing other candidates.
+Missing LAPS or BitLocker data is treated as expected. Retrieval, archive write, response-identity validation, or companion-index write failures block deletion for that device, record a partial-run failure, and do not prevent the runbook from processing other candidates. An index failure can leave an orphan archive version; the failure records only its safe name, version, and cleanup run ID for reconciliation.
 
 The inactivity decision is based on the **latest available heartbeat**, not only on Entra `approximateLastSignInDateTime`. That makes the workflow safer when a device is still alive in Intune, Defender for Endpoint, or advanced hunting data even if its Entra certificate is broken.
 
@@ -53,8 +55,9 @@ flowchart TD
     E -- No --> Y[Remain disabled]
     E -- Yes --> F{deleteEnabled?}
     F -- No --> G[Dry run only<br/>no deletion]
-    F -- Yes --> H[Archive to Key Vault]
-    H --> I[Delete device]
+    F -- Yes --> H[Write versioned archive]
+    H --> I[Write bound metadata index]
+    I --> J[Delete device]
 ```
 
 ## Device check-in enrichment

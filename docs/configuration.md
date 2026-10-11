@@ -36,6 +36,7 @@ The default deployment wires these settings into the published runbook:
 | `recoveryGroupObjectId` | empty | Optional existing assigned Microsoft Entra security group object ID for archive recovery operators |
 | `recoveryGroupName` | `device-cleanup-recovery` | Group created or reused when no recovery group object ID is supplied |
 | `intuneCheckInExtensionAttributeNumber` | `14` | Device extensionAttribute slot for Intune check-in state; set `0` to disable |
+| `primaryArchiveUserCollectionEnabled` | `false` | Collect the bounded Intune primary-user relationship only for an archive-producing delete candidate |
 | `defenderCheckInExtensionAttributeNumber` | `15` | Device extensionAttribute slot for Defender check-in state from the Defender machines API; set `0` to disable that source |
 | `intuneDynamicGroupEnabled` | `true` | Create or update a dynamic device group for the Intune check-in attribute |
 | `intuneDynamicGroupName` | empty | Optional display name override for the Intune dynamic group |
@@ -49,6 +50,8 @@ The default deployment wires these settings into the published runbook:
 | `retentionInDays` | `90` | Key Vault soft-delete retention |
 
 The scheduled job never supplies `DisableBatchOverrideCount`. If an authorized operator reviews an above-limit candidate batch and chooses to run it once, start a manual Automation job with `DisableBatchOverrideCount` equal to that run's exact disable candidate count. A mismatch, a stale override on a within-limit run, or a non-positive `maxDisableCount` fails before any disable/delete action. A dry run with `disableEnabled=false` can still report a larger candidate count without using an override.
+
+For environments created before `PRIMARY_ARCHIVE_USER_COLLECTION_ENABLED` was emitted, post-provision and preflight treat the missing value as `false`. Supplying an invalid non-boolean value still fails closed.
 
 > [!NOTE]
 > This repository currently supplies these values directly through `infra/main.parameters.json`. Edit that file in the initialized project before `azd up` or a later `azd provision`; an arbitrary `azd env set <parameter-name>` does not override a literal value in that file.
