@@ -173,3 +173,47 @@ Independent terminal review SHA-256:
 `FBB6708341133A7949F37CCF6E9F864ED7FE24B7118382299923A12EF584094E`.
 All earlier attempts remain preserved. CLEAN-007 remains proposed with its
 original acceptance and remaining output/runtime/projection/history/delivery gates.
+
+## Complete synthetic case accounting with remaining output qualification
+
+Two further synthetic attempts on 2026-10-11 used unchanged production source
+`49f0c712bab7ad72e78593addaee4df4b5e9a8f6`.
+
+The earlier attempt stopped before the first case with
+`RuntimeTransportRejected` at `CreateSynthetic500`. It retained two creation
+intents and no workflow PUT acknowledgment or safe HTTP status. The cause is
+unknown; neither an intent nor the wrapped error proves request dispatch,
+timeout or provider rejection. No cases or output/projection evidence qualified.
+
+The final attempt completed all twenty fixed synthetic cases and their
+independent gates, with twenty candidate invocations and complete terminal
+accounting for thirty owned synthetic receiver runs. Version-bound decisions,
+child statuses and exact owned fake-receiver canonical semantic projection hashes qualified for these
+fixtures. `schemaProjectionCasesComplete=true` records this bounded fixture
+suite, including its packed dimensions; it does not prove every field boundary
+independently or message delivery to real recipients.
+
+Final source-bound aggregation observed fifteen of twenty-four distinct required
+output pairs. Nine exact String entries with missing values and no error field
+remained deferred failed qualifications; no values were inferred or substituted.
+The process exited nonzero with `RequiredOutputsIncomplete` at
+`RequiredOutputQualification`. `nativeAcceptance=false` and
+`historyProtection=PendingAuthoritativeEvidence` remain explicit. Complete
+required evaluated outputs and protected-history acceptance are still open.
+
+Each attempt recorded one acknowledged exact owned-group DELETE, four exact
+final HTTP404 observations and unchanged default context, with twenty-one
+inherited roles untouched and zero owned/outside roles recorded. These are
+scoped bound harness observations, not independent fresh API reads or broad
+absence claims.
+
+Earlier receipt SHA-256:
+`B42F034DAD991FB492352C30D2124CB7FFFE39C5B5810391AC1270407906B904`.
+Earlier independent terminal review SHA-256:
+`2ED3759BA5ECC51D8AD247AA80D10830D67CE8280B1755E752F72B48FB14E586`.
+Final receipt SHA-256:
+`D1EF99D19E21EEBF763D2F0611B379999BAC9F160B767756CB81436516C1B341`.
+Final independent terminal review SHA-256: `C9E899480ABB09B7291774A1191A42A6290F8539DDD7DAE32D502440E1B5D89D`.
+All earlier attempts remain preserved. CLEAN-007 remains proposed with its
+original acceptance; completed synthetic gates do not close its remaining
+output/history qualification or recipient-visible delivery checks.
