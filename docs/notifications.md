@@ -104,3 +104,35 @@ Independent terminal review SHA-256:
 `BA55A55665499C05754C485ADD67D0E556EF84AB61A4AE1EE49D972C9BFB7B2B`.
 The earlier attempts remain preserved. CLEAN-007 remains proposed with its
 original acceptance and remaining native/runtime/delivery gates.
+
+## Output availability in the third attempt
+
+The third independently reviewed synthetic attempt on 2026-10-11 retained one
+RouteA HTTP202/native-version-bound accepted run and all three exact child
+statuses: `Post_notification=Failed`, `Post_teams=Succeeded` and
+`Post_email=Skipped`. Source `49f0c712bab7ad72e78593addaee4df4b5e9a8f6`
+remained unchanged.
+
+At `NativeOutputValidation`, the strict gate stopped with
+`OutputStatusUnavailable`. The `envelopeRouteStatus` map/entry and String type
+were present, its value field was missing, and no error field was present.
+These flags describe availability only. They do not establish why the value
+was missing, a hidden value, protected history, or the cause of the previous
+unclassified failure. No protected content was fetched to bypass this gate.
+
+Output and receiver-attempt evidence arrays remained empty, no receiver hashes
+qualified, and nineteen cases did not run. `receiverAccounting` was
+`NotEnumeratedAfterDispatch`; its zero receiver counter is stale rather than
+proof of zero receiver work. RouteA and full native acceptance are incomplete.
+
+Reviewed cleanup recorded one acknowledged exact owned-group DELETE, four
+exact final HTTP404 observations and unchanged default context, with
+twenty-one inherited roles untouched and zero owned/outside roles recorded.
+These are scoped bound harness observations, not independent fresh API reads
+or a broader absence claim.
+
+Receipt SHA-256: `6B2543D9F6F32DB9F6C6DE31368CC7FC8C79042A63826D4DF3BB52C91E6ED1AD`.
+Independent terminal review SHA-256:
+`700A874285877FB3123B86AC20FF5E1736C67124EE14BF7110AB3996957A88AA`.
+All earlier attempts remain preserved. CLEAN-007 remains proposed with its
+original acceptance and remaining output/runtime/projection/history/delivery gates.
