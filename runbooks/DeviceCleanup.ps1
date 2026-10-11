@@ -20,6 +20,7 @@ param(
     [string] $NotifyOnFailure = '__LOGIC_APP_NOTIFY_ON_FAILURE__',
     [string] $NotifyOnNoAction = '__LOGIC_APP_NOTIFY_ON_NO_ACTION__',
     [string] $EnvironmentName = '__AZURE_ENV_NAME__',
+    [string] $TenantId = '__AZURE_TENANT_ID__',
     [string] $SubscriptionId = '__AZURE_SUBSCRIPTION_ID__',
     [string] $ResourceGroupName = '__AZURE_RESOURCE_GROUP__',
     [string] $AutomationAccountName = '__AUTOMATION_ACCOUNT_NAME__',
@@ -1590,6 +1591,7 @@ function Get-DeviceCleanupSettings {
         NotifyOnFailure = $resolvedNotifyOnFailure
         NotifyOnNoAction = $resolvedNotifyOnNoAction
         EnvironmentName = if ([string]::IsNullOrWhiteSpace($resolvedEnvironmentName)) { 'unknown' } else { $resolvedEnvironmentName }
+        TenantId = Get-OptionalConfiguredInput -Value $TenantId
         SubscriptionId = $resolvedSubscriptionId
         ResourceGroupName = $resolvedResourceGroupName
         AutomationAccountName = $resolvedAutomationAccountName
@@ -1632,6 +1634,71 @@ function New-DeviceCleanupActionRecord {
     return [pscustomobject] $record
 }
 
+function ConvertTo-DeviceCleanupNotificationEnvelope {
+    param([Parameter(Mandatory)][object] $Summary, [Parameter(Mandatory)][string] $TenantId)
+
+    # Project only selected scalar metadata. Raw results, failure text, device names,
+    # archive pointers and recovery material never enter notification payloads.
+    $ids = @{}
+    foreach ($entry in @(@('tenantId', $TenantId), @('subscriptionId', $Summary.subscriptionId), @('runId', $Summary.cleanupRunId))) {
+        $id = [guid]::Empty
+        if (-not [guid]::TryParse([string]$entry[1], [ref]$id) -or $id -eq [guid]::Empty) { throw 'Invalid notification identity.' }
+        $ids[$entry[0]] = $id.ToString()
+    }
+    $names = @{}
+    foreach ($field in @('environmentName', 'resourceGroupName', 'automationAccountName', 'runbookName')) {
+        $value = [string]$Summary.$field
+        if ($value -notmatch '^[A-Za-z0-9][A-Za-z0-9._()-]{0,127}$') { throw 'Invalid notification resource name.' }
+        $names[$field] = $value
+    }
+    if ($Summary.status -cnotin @('Succeeded', 'PartiallySucceeded', 'NoAction', 'Failed', 'Skipped')) { throw 'Invalid notification status.' }
+    $finished = [DateTimeOffset]::MinValue
+    if ([string]$Summary.finishedAtUtc -notmatch '^\d{4}-\d{2}-\d{2}T' -or
+        -not [DateTimeOffset]::TryParse([string]$Summary.finishedAtUtc, [ref]$finished)) { throw 'Invalid notification timestamp.' }
+    $counts = [ordered]@{}
+    foreach ($field in @('totalDevices', 'excludedDevices', 'intuneDefenderAttributeUpdates', 'restrictedManagementUnitSkipped', 'disableCandidates', 'deleteCandidates', 'disabledDevices', 'archivedDeletedDevices', 'dryRunDisableCandidates', 'dryRunDeleteCandidates', 'actionFailures')) {
+        $count = 0L
+        if (-not [long]::TryParse([string]$Summary.counts.$field, [ref]$count) -or $count -lt 0 -or $count -gt 10000000) { throw 'Invalid notification count.' }
+        $counts[$field] = $count
+    }
+    $severity = switch -CaseSensitive ($Summary.severity) { 'Error' { 'high' }; 'Warning' { 'medium' }; 'Informational' { 'informational' }; default { throw 'Invalid notification severity.' } }
+    $title = 'Device cleanup: ' + $Summary.status
+    $text = 'Review the Automation job output before taking action. Disabled: {0}; archived and deleted: {1}; failures: {2}; dry-run candidates: {3}.' -f $counts.disabledDevices, $counts.archivedDeletedDevices, $counts.actionFailures, ($counts.dryRunDisableCandidates + $counts.dryRunDeleteCandidates)
+    $resourcePath = '/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.Automation/automationAccounts/{2}' -f $ids.subscriptionId, [Uri]::EscapeDataString($names.resourceGroupName), [Uri]::EscapeDataString($names.automationAccountName)
+    $reviewUrl = 'https://portal.azure.com/#resource' + $resourcePath
+    $facts = @(
+        @{ title = 'Environment'; value = $names.environmentName },
+        @{ title = 'Runbook'; value = $names.runbookName },
+        @{ title = 'Run'; value = $ids.runId },
+        @{ title = 'Finished (UTC)'; value = $finished.ToUniversalTime().ToString('o') }
+    )
+    $teams = [ordered]@{
+        type = 'message'
+        attachments = @(@{
+            contentType = 'application/vnd.microsoft.card.adaptive'
+            contentUrl = $null
+            content = @{
+                '$schema' = 'https://adaptivecards.io/schemas/adaptive-card.json'; type = 'AdaptiveCard'; version = '1.2'
+                body = @(@{ type = 'TextBlock'; text = $title; weight = 'Bolder'; wrap = $true }, @{ type = 'TextBlock'; text = $text; wrap = $true }, @{ type = 'FactSet'; facts = $facts })
+                actions = @(@{ type = 'Action.OpenUrl'; title = 'Review Automation jobs'; url = $reviewUrl })
+            }
+        })
+    }
+    $email = [ordered]@{
+        subject = $title + ' [' + $names.environmentName + ']'
+        text = $text + "`nRun: " + $ids.runId + "`nReview: " + $reviewUrl
+        html = '<p>' + [Net.WebUtility]::HtmlEncode($text) + '</p><p>Run: ' + $ids.runId + '</p><p><a href="' + [Net.WebUtility]::HtmlEncode($reviewUrl) + '">Review Automation jobs</a></p>'
+    }
+    $envelope = [ordered]@{
+        schemaVersion = '1.0'; eventId = 'cleanup.' + $ids.runId; eventType = 'deviceCleanup.completed'; source = 'azd.deviceCleanup'
+        occurredAt = $finished.ToUniversalTime().ToString('o'); severity = $severity; correlationId = $ids.runId; isTest = $false
+        environment = @{ name = $names.environmentName; tenantId = $ids.tenantId; subscriptionId = $ids.subscriptionId; resourceGroup = $names.resourceGroupName }
+        data = @{ status = $Summary.status; counts = $counts; runbookName = $names.runbookName; reviewUrl = $reviewUrl; teams = $teams; email = $email }
+    }
+    if ([Text.Encoding]::UTF8.GetByteCount(($envelope | ConvertTo-Json -Depth 20 -Compress)) -gt 16384) { throw 'Notification exceeds the payload limit.' }
+    return $envelope
+}
+
 function Invoke-NotificationCallback {
     param(
         [Parameter(Mandatory = $true)]
@@ -1640,19 +1707,22 @@ function Invoke-NotificationCallback {
         [object] $Payload
     )
 
+    $parsedUri = $null
+    if (-not [Uri]::TryCreate($Uri, [UriKind]::Absolute, [ref]$parsedUri) -or $parsedUri.Scheme -ne 'https' -or $parsedUri.UserInfo -or $parsedUri.Fragment) { throw 'Invalid notification callback address.' }
     $body = $Payload | ConvertTo-Json -Depth 20 -Compress
+    if ([Text.Encoding]::UTF8.GetByteCount($body) -gt 16384) { throw 'Notification exceeds the payload limit.' }
     for ($attempt = 1; $attempt -le 3; $attempt++) {
         try {
             Invoke-RestMethod -Method 'POST' -Uri $Uri -Headers @{
                 'Content-Type' = 'application/json'
                 'User-Agent' = 'azd-device-cleanup/0.1.0'
-            } -Body $body -ErrorAction Stop | Out-Null
+            } -Body $body -MaximumRedirection 0 -TimeoutSec 30 -ErrorAction Stop | Out-Null
 
             return
         }
         catch {
             if ($attempt -ge 3) {
-                throw
+                throw 'Notification callback was not accepted after three bounded attempts.'
             }
 
             Start-Sleep -Seconds ([int] [math]::Pow(2, $attempt - 1))
@@ -1690,11 +1760,12 @@ function Invoke-DeviceCleanupNotification {
     }
 
     try {
-        Invoke-NotificationCallback -Uri $Settings.NotificationCallbackUrl -Payload $Summary
-        Write-Output "Sent Logic App notification for cleanup status '$($Summary.status)'."
+        $envelope = ConvertTo-DeviceCleanupNotificationEnvelope -Summary $Summary -TenantId $Settings.TenantId
+        Invoke-NotificationCallback -Uri $Settings.NotificationCallbackUrl -Payload $envelope
+        Write-Output "Logic App accepted the notification request for cleanup status '$($Summary.status)'. Recipient delivery remains unverified."
     }
     catch {
-        Write-Warning "Failed to send Logic App notification for cleanup status '$($Summary.status)'. Error: $($_.Exception.Message)"
+        Write-Warning 'Cleanup notification was not accepted. Review the configured callback and bounded metadata; no provider error or callback address is emitted.'
     }
 }
 

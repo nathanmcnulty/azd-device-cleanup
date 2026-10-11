@@ -21,7 +21,9 @@ The default deployment wires these settings into the published runbook:
 | `cleanupScheduleStartTime` | computed | Defaults to 15 minutes after deployment unless overridden |
 | `logicAppNotificationsEnabled` | `true` | Deploy the Logic App workflow and let the runbook send summary events to it |
 | `logicAppNotificationWorkflowName` | computed | Optional Logic App workflow name override |
-| `logicAppNotificationWebhookUrl` | empty | Optional secure downstream webhook URL, such as a Teams workflow trigger URL |
+| `logicAppNotificationWebhookUrl` | empty | Optional secure HTTPS receiver for the version 1.0 notification envelope |
+| `logicAppTeamsWebhookUrl` | empty | Optional secure HTTPS Teams Workflow receiver for an Adaptive Card message |
+| `logicAppEmailWebhookUrl` | empty | Optional secure HTTPS email workflow receiver; receiver owner chooses recipients/credentials |
 | `logicAppNotifyOnSuccess` | `true` | Send notifications for successful runs |
 | `logicAppNotifyOnFailure` | `true` | Send notifications for failed runs |
 | `logicAppNotifyOnNoAction` | `false` | Send notifications when no disable/delete candidates are found |
@@ -89,7 +91,7 @@ Deploy, populate and verify the exclusion group, run `scripts/preflight.ps1`, an
 
 ## Notification destination
 
-The Logic App records run history without an external connector. To forward the normalized summary, set the sensitive `logicAppNotificationWebhookUrl` Bicep parameter through an approved secret-handling deployment process. Do not commit a real webhook URL to `infra/main.parameters.json`.
+The Logic App records run history without an external connector. Configure only selected secure HTTPS routes through an approved secret-handling deployment process. Do not commit real URLs to `infra/main.parameters.json`. See [notification formats and receiver migration](notifications.md) for the bounded envelope, independent optional Teams/email routes and delivery proof limits.
 
 ## Automation
 

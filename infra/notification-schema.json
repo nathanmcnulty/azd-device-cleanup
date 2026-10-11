@@ -1,0 +1,85 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "eventType",
+    "source",
+    "occurredAt",
+    "severity",
+    "correlationId",
+    "isTest",
+    "environment",
+    "data"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "enum": [
+        "1.0"
+      ]
+    },
+    "eventId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "eventType": {
+      "maxLength": 256,
+      "type": "string"
+    },
+    "source": {
+      "maxLength": 256,
+      "type": "string"
+    },
+    "occurredAt": {
+      "type": "string"
+    },
+    "severity": {
+      "enum": [
+        "informational",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "isTest": {
+      "type": "boolean"
+    },
+    "environment": {
+      "required": [
+        "name",
+        "tenantId"
+      ],
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "resourceGroup": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "subscriptionId": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        }
+      }
+    },
+    "data": {
+      "type": "object"
+    }
+  }
+}

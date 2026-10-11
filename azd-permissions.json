@@ -17,7 +17,7 @@
       "scope": "tenant",
       "rationale": "Read Entra device identity, state, extension attributes, and heartbeat metadata.",
       "evidenceState": "code",
-      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "7534d69954b7508e15220566adeb48907589304d816fe64345c78ee7ce0c0272"}]
+      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "48c43e98c042c4964aefd8d7921da792e77bafbba4ec19391b5cc95df0d6f390"}]
     },
     {
       "resource": "https://graph.microsoft.com",
@@ -30,7 +30,7 @@
       "scope": "tenant",
       "rationale": "Write derived extension attributes, disable stale devices, and delete only explicitly enabled eligible devices after archive and index success.",
       "evidenceState": "code",
-      "evidence": [{"path": "runbooks/DeviceCleanup.ps1", "sha256": "0417af09f3208f885c87fe29f4aa2e5931538810858074e2bee5f50c56f6054d"}]
+      "evidence": [{"path": "runbooks/DeviceCleanup.ps1", "sha256": "e839e9be7f4f5f1962d9bb454dc14611dba9f8f2d8dc0c05c9026f55c8fbbc2b"}]
     },
     {
       "resource": "https://graph.microsoft.com",
@@ -43,7 +43,7 @@
       "scope": "tenant",
       "rationale": "Resolve the configured exclusion group used by cleanup safety checks.",
       "evidenceState": "code",
-      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "7534d69954b7508e15220566adeb48907589304d816fe64345c78ee7ce0c0272"}]
+      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "48c43e98c042c4964aefd8d7921da792e77bafbba4ec19391b5cc95df0d6f390"}]
     },
     {
       "resource": "https://graph.microsoft.com",
@@ -56,7 +56,7 @@
       "scope": "configured-exclusion-group",
       "rationale": "Read direct device membership of the configured exclusion group.",
       "evidenceState": "code",
-      "evidence": [{"path": "runbooks/DeviceCleanup.ps1", "sha256": "0417af09f3208f885c87fe29f4aa2e5931538810858074e2bee5f50c56f6054d"}]
+      "evidence": [{"path": "runbooks/DeviceCleanup.ps1", "sha256": "e839e9be7f4f5f1962d9bb454dc14611dba9f8f2d8dc0c05c9026f55c8fbbc2b"}]
     },
     {
       "resource": "https://graph.microsoft.com",
@@ -69,7 +69,7 @@
       "scope": "tenant",
       "rationale": "Read Windows LAPS credentials for an archive-producing delete candidate.",
       "evidenceState": "code",
-      "evidence": [{"path": "runbooks/DeviceCleanup.ps1", "sha256": "0417af09f3208f885c87fe29f4aa2e5931538810858074e2bee5f50c56f6054d"}]
+      "evidence": [{"path": "runbooks/DeviceCleanup.ps1", "sha256": "e839e9be7f4f5f1962d9bb454dc14611dba9f8f2d8dc0c05c9026f55c8fbbc2b"}]
     },
     {
       "resource": "https://graph.microsoft.com",
@@ -82,7 +82,7 @@
       "scope": "tenant",
       "rationale": "Read BitLocker recovery material for an archive-producing delete candidate.",
       "evidenceState": "code",
-      "evidence": [{"path": "runbooks/DeviceCleanup.ps1", "sha256": "0417af09f3208f885c87fe29f4aa2e5931538810858074e2bee5f50c56f6054d"}]
+      "evidence": [{"path": "runbooks/DeviceCleanup.ps1", "sha256": "e839e9be7f4f5f1962d9bb454dc14611dba9f8f2d8dc0c05c9026f55c8fbbc2b"}]
     },
     {
       "resource": "https://graph.microsoft.com",
@@ -95,7 +95,7 @@
       "scope": "tenant",
       "rationale": "Read Intune heartbeat data by default and, when explicitly enabled, the bounded managed-device primary-user relationship.",
       "evidenceState": "code",
-      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "7534d69954b7508e15220566adeb48907589304d816fe64345c78ee7ce0c0272"}]
+      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "48c43e98c042c4964aefd8d7921da792e77bafbba4ec19391b5cc95df0d6f390"}]
     },
     {
       "resource": "https://graph.microsoft.com",
@@ -108,7 +108,7 @@
       "scope": "tenant",
       "rationale": "Run the optional advanced-hunting heartbeat query when the default-enabled feature is configured.",
       "evidenceState": "code",
-      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "7534d69954b7508e15220566adeb48907589304d816fe64345c78ee7ce0c0272"}]
+      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "48c43e98c042c4964aefd8d7921da792e77bafbba4ec19391b5cc95df0d6f390"}]
     },
     {
       "resource": "https://api.securitycenter.microsoft.com",
@@ -121,7 +121,7 @@
       "scope": "tenant",
       "rationale": "Read Defender machine heartbeat data when its extension-attribute slot is enabled.",
       "evidenceState": "code",
-      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "7534d69954b7508e15220566adeb48907589304d816fe64345c78ee7ce0c0272"}]
+      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "48c43e98c042c4964aefd8d7921da792e77bafbba4ec19391b5cc95df0d6f390"}]
     },
     {
       "resource": "https://vault.azure.net",
@@ -134,7 +134,7 @@
       "scope": "solution-archive-key-vault",
       "rationale": "Create versioned recovery archives and their version-bound metadata indexes.",
       "evidenceState": "code",
-      "evidence": [{"path": "infra/resources.bicep", "sha256": "02d073ff1fe86a4e22c960ee5662751e37d6d009cbbb087d43ef96ce924814ca"}]
+      "evidence": [{"path": "infra/resources.bicep", "sha256": "0831b9ea6c2cc4fc9535597b5c0c4dff3848f70032eebf6b089bd887f5821374"}]
     },
     {
       "resource": "https://vault.azure.net",
@@ -147,7 +147,7 @@
       "scope": "solution-archive-key-vault",
       "rationale": "Allow only members of the configured assigned recovery group to perform explicit archive recovery reads.",
       "evidenceState": "code",
-      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "7534d69954b7508e15220566adeb48907589304d816fe64345c78ee7ce0c0272"}]
+      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "48c43e98c042c4964aefd8d7921da792e77bafbba4ec19391b5cc95df0d6f390"}]
     }
   ],
   "gaps": [
