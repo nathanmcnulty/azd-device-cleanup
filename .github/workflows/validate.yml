@@ -32,18 +32,16 @@ jobs:
             $errors += @($fileErrors)
           }
           if ($errors.Count) { throw ($errors | Out-String) }
-      - name: Test device action safety
+      - name: Install Bicep
+        run: az bicep install --version v0.46.1
+      - name: Test device action safety and notification workflow
         run: |
           Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
           Import-Module Pester -RequiredVersion 5.7.1
           $result = Invoke-Pester -Path ./tests -PassThru
-          if ($result.FailedCount -gt 0 -or $result.TotalCount -eq 0) { throw 'Device action safety tests failed.' }
+          if ($null -eq $result -or $result.FailedCount -gt 0 -or $result.TotalCount -eq 0 -or $result.SkippedCount -gt 0 -or $result.NotRunCount -gt 0) { throw 'Device action safety tests failed or were incomplete.' }
       - name: Validate JSON
         run: |
           Get-ChildItem -Path . -Recurse -File -Filter *.json | ForEach-Object {
             Get-Content $_.FullName -Raw | ConvertFrom-Json -Depth 100 | Out-Null
           }
-      - name: Install Bicep
-        run: az bicep install
-      - name: Build Bicep
-        run: az bicep build --file ./infra/main.bicep --stdout | Out-Null

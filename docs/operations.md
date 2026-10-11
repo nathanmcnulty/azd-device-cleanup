@@ -22,22 +22,9 @@ Rerun `azd up` after reviewing configuration changes. The post-provision hook re
 
 ## Logic App notifications and reporting
 
-The deployment now creates an **Azure Logic App Consumption workflow** for cleanup reporting by default.
+The default Consumption workflow receives the runbook's bounded version 1.0 notification envelope. It retains selected run/target metadata, status, severity and counts, with a secret-free Azure portal review link. Per-device results, archive pointers, recovery values and raw provider/failure text stay outside notification payloads.
 
-- The runbook posts a normalized JSON summary at the end of each successful run and whenever a run fails.
-- The Logic App always records the event in workflow run history.
-- If you set `logicAppNotificationWebhookUrl`, the Logic App also forwards the same JSON payload to that downstream webhook.
-
-This keeps the Azure deployment fully automated without requiring pre-authorized connector resources. A simple first use is to point the webhook at a Teams workflow trigger, another Logic App, or any internal HTTP endpoint that should receive cleanup alerts.
-
-The summary payload includes:
-
-- environment, subscription, resource group, automation account, and runbook names
-- `cleanupRunId` so notifications and archived device records can be correlated to the same run
-- run status and severity
-- candidate counts, dry-run counts, executed disable/delete counts, and excluded-device counts
-- per-device execution details for disable/archive-delete actions
-- failure details when a run terminates with an error, plus per-device action failures when a run partially succeeds
+[Notification routes](notifications.md) describes three independent optional HTTPS receivers: the full envelope, a Teams Adaptive Card message, and email subject/text/html. Each route defaults empty and requires an already configured receiver; this feature does not choose recipients or grant permissions. Existing generic receivers must migrate from the old raw-summary payload. Review Logic App child-action status and receiver history independently. HTTP acceptance is not recipient delivery or exactly-once processing, and retries can duplicate requests.
 
 ## Troubleshoot
 

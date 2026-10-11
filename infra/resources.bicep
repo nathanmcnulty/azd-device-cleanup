@@ -31,6 +31,14 @@ param logicAppNotificationWorkflowName string
 @description('Optional downstream webhook URL that the Logic App should forward notifications to, such as a Teams workflow trigger URL.')
 param logicAppNotificationWebhookUrl string = ''
 
+@secure()
+@description('Optional Teams Workflow HTTPS callback. Empty disables this route.')
+param logicAppTeamsWebhookUrl string = ''
+
+@secure()
+@description('Optional owner-managed email workflow HTTPS callback. Empty disables this route.')
+param logicAppEmailWebhookUrl string = ''
+
 @allowed([
   'Day'
   'Hour'
@@ -151,7 +159,15 @@ resource notificationWorkflow 'Microsoft.Logic/workflows@2019-05-01' = if (logic
           defaultValue: false
         }
         notificationWebhookUrl: {
-          type: 'String'
+          type: 'SecureString'
+          defaultValue: ''
+        }
+        teamsWebhookUrl: {
+          type: 'SecureString'
+          defaultValue: ''
+        }
+        emailWebhookUrl: {
+          type: 'SecureString'
           defaultValue: ''
         }
       }
@@ -159,59 +175,10 @@ resource notificationWorkflow 'Microsoft.Logic/workflows@2019-05-01' = if (logic
         manual: {
           type: 'Request'
           kind: 'Http'
+          operationOptions: 'EnableSchemaValidation'
           inputs: {
-            schema: {
-              type: 'object'
-              properties: {
-                environmentName: {
-                  type: 'string'
-                }
-                subscriptionId: {
-                  type: 'string'
-                }
-                resourceGroupName: {
-                  type: 'string'
-                }
-                automationAccountName: {
-                  type: 'string'
-                }
-                runbookName: {
-                  type: 'string'
-                }
-                status: {
-                  type: 'string'
-                }
-                severity: {
-                  type: 'string'
-                }
-                summaryText: {
-                  type: 'string'
-                }
-                startedAtUtc: {
-                  type: 'string'
-                }
-                finishedAtUtc: {
-                  type: 'string'
-                }
-                counts: {
-                  type: 'object'
-                }
-                results: {
-                  type: 'object'
-                }
-                failure: {
-                  type: 'object'
-                }
-              }
-              required: [
-                'environmentName'
-                'status'
-                'severity'
-                'summaryText'
-                'startedAtUtc'
-                'finishedAtUtc'
-              ]
-            }
+            method: 'POST'
+            schema: loadJsonContent('../contracts/notifications/notification-envelope.schema.json')
           }
         }
       }
@@ -231,9 +198,13 @@ resource notificationWorkflow 'Microsoft.Logic/workflows@2019-05-01' = if (logic
           actions: {
             Post_notification: {
               type: 'Http'
+              operationOptions: 'DisableAsyncPattern'
+              runtimeConfiguration: {
+                secureData: { properties: ['inputs', 'outputs'] }
+              }
               inputs: {
                 method: 'POST'
-                uri: '@parameters(\'notificationWebhookUrl\')'
+                uri: '@if(equals(toLower(uriScheme(parameters(\'notificationWebhookUrl\'))), \'https\'), parameters(\'notificationWebhookUrl\'), null)'
                 headers: {
                   'Content-Type': 'application/json'
                 }
@@ -246,8 +217,54 @@ resource notificationWorkflow 'Microsoft.Logic/workflows@2019-05-01' = if (logic
           }
           runAfter: {}
         }
+        Forward_to_teams: {
+          type: 'If'
+          expression: '@not(empty(parameters(\'teamsWebhookUrl\')))'
+          actions: {
+            Post_teams: {
+              type: 'Http'
+              operationOptions: 'DisableAsyncPattern'
+              runtimeConfiguration: {
+                secureData: { properties: ['inputs', 'outputs'] }
+              }
+              inputs: {
+                method: 'POST'
+                uri: '@if(equals(toLower(uriScheme(parameters(\'teamsWebhookUrl\'))), \'https\'), parameters(\'teamsWebhookUrl\'), null)'
+                headers: { 'Content-Type': 'application/json' }
+                body: '@triggerBody()?[\'data\']?[\'teams\']'
+              }
+            }
+          }
+          else: { actions: {} }
+          runAfter: {}
+        }
+        Forward_to_email: {
+          type: 'If'
+          expression: '@not(empty(parameters(\'emailWebhookUrl\')))'
+          actions: {
+            Post_email: {
+              type: 'Http'
+              operationOptions: 'DisableAsyncPattern'
+              runtimeConfiguration: {
+                secureData: { properties: ['inputs', 'outputs'] }
+              }
+              inputs: {
+                method: 'POST'
+                uri: '@if(equals(toLower(uriScheme(parameters(\'emailWebhookUrl\'))), \'https\'), parameters(\'emailWebhookUrl\'), null)'
+                headers: { 'Content-Type': 'application/json' }
+                body: '@triggerBody()?[\'data\']?[\'email\']'
+              }
+            }
+          }
+          else: { actions: {} }
+          runAfter: {}
+        }
       }
-      outputs: {}
+      outputs: {
+        envelopeRouteStatus: { type: 'String', value: '@coalesce(actions(\'Post_notification\')?[\'status\'], \'Skipped\')' }
+        teamsRouteStatus: { type: 'String', value: '@coalesce(actions(\'Post_teams\')?[\'status\'], \'Skipped\')' }
+        emailRouteStatus: { type: 'String', value: '@coalesce(actions(\'Post_email\')?[\'status\'], \'Skipped\')' }
+      }
     }
     parameters: {
       forwardNotifications: {
@@ -256,6 +273,8 @@ resource notificationWorkflow 'Microsoft.Logic/workflows@2019-05-01' = if (logic
       notificationWebhookUrl: {
         value: logicAppNotificationWebhookUrl
       }
+      teamsWebhookUrl: { value: logicAppTeamsWebhookUrl }
+      emailWebhookUrl: { value: logicAppEmailWebhookUrl }
     }
     state: 'Enabled'
   }

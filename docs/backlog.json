@@ -239,7 +239,12 @@
       "sources": [
         "TODO.md"
       ],
-      "evidence": [],
+      "evidence": [
+        "2026-10-10 bounded source implementation on base 08f5efa647f94d1414447973b6ee036a130c68b1: version 1.0 scalar notification envelope, separate Adaptive Card and email formatting, three independently configured sibling HTTPS routes, secure parameters and HTTP input/output history protection. Existing generic consumers require version 1.0 migration; no new recipients, connector credentials, Graph grants or lifecycle defaults were introduced.",
+        "Offline PowerShell 7.6.6/Pester 5.7.1 full suite passed 100/100, zero failed/skipped/not-run. Fourteen new production-bound producer/dispatcher/compiled-template cases test schema and 16KiB projection, hostile identities/counts, suppressed routes, sanitized callback retries, exact schema-variable resolution, sibling route/default/history protections and immutable vendor hashes. Registered parser/JSON/Bicep0.46.1 gates, generated ARM byte parity and canonical permission/backlog checks passed.",
+        "notification-contracts 1.0.0 schemas are vendored at immutable Reference 6dc5841a3156b904b89f0f4ff8d97207a26ec15a; exact raw hashes are recorded in azd-components.lock.json. Generic envelope schema use is proven locally; workflow action-status outputs do not implement canonical delivery-result receipts. Request trigger explicitly enables schema validation; native draft2020-12/$defs/$ref/const/pattern acceptance/enforcement and child outputs for successful/failed/skipped routes remain unproven.",
+        "CLEAN-007 remains proposed pending independent code review and native Workflow Definition Language proof. HTTP acknowledgements, static sibling runAfter inspection and formatting/schema tests do not prove recipient delivery, exactly-once processing, or runtime failure independence. No auth, deployment, callbacks, tenant/device writes, archive access or resources were used."
+      ],
       "blocker": null
     },
     {

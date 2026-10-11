@@ -839,6 +839,7 @@ $renderedRunbookPath = Get-RenderedRunbookPath -RunbookTemplatePath $runbookTemp
   '__LOGIC_APP_NOTIFY_ON_FAILURE__' = $logicAppNotifyOnFailure
   '__LOGIC_APP_NOTIFY_ON_NO_ACTION__' = $logicAppNotifyOnNoAction
   '__AZURE_ENV_NAME__' = $environmentName
+  '__AZURE_TENANT_ID__' = $tenantId
   '__AZURE_SUBSCRIPTION_ID__' = $subscriptionId
   '__AZURE_RESOURCE_GROUP__' = $resourceGroupName
   '__AUTOMATION_ACCOUNT_NAME__' = $automationAccountName

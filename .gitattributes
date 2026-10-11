@@ -1,0 +1,2 @@
+# Preserve immutable vendored schema bytes across Windows and Linux checkouts.
+/contracts/notifications/*.json text eol=lf
