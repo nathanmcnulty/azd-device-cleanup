@@ -49,3 +49,29 @@ This is definition acceptance. Native schema and pattern enforcement, Unicode
 code-point boundaries, protected history, route status/output expressions,
 sibling failure independence, and recipient-visible delivery still need proof.
 CLEAN-007 remains proposed.
+
+## Synthetic setup attempt and cleanup
+
+The independently reviewed synthetic attempt on 2026-10-11 created three owned
+workflows from source `49f0c712bab7ad72e78593addaee4df4b5e9a8f6`. All three
+received successful PUT/version acknowledgments and matching public GET checks,
+including the source definition's empty secure defaults. This confirms the
+tested setup projection, not readback of hidden route values.
+
+Execution stopped with `EndpointRejected` at `CreateExactCandidate` before any
+runtime case or candidate invocation. The cause remains unproven. The receipt
+records zero cases, candidate invocations and receiver runs; it supplies no
+native schema/pattern/Unicode enforcement, route status/output, sibling failure
+independence, projection, protected-history or recipient-delivery evidence.
+
+The reviewed cleanup recorded one acknowledged exact owned-group DELETE and
+four exact final HTTP404 observations, with the default context unchanged.
+Twenty-one inherited role assignments were counted and untouched; zero owned
+or outside assignments were recorded. These are the bound harness's observations,
+not an independent fresh API read or a broader resource-absence claim.
+
+Receipt SHA-256: `39F96EE62B1D2E4EC0D1CAE1A1777330FFC2EC8380362EFA5B679466DE3DA471`.
+Independent terminal review SHA-256:
+`F0CB4BD8008A37CB810BCEA89D87A98373CFC809AD1BF851AE92462C80B01006`.
+Prior failed artifacts remain preserved. CLEAN-007 remains proposed with its
+original acceptance gates and the runtime/delivery proof still outstanding.
