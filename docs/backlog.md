@@ -571,6 +571,7 @@ Operators need serial, hostname and primary-user lookup without exposing recover
 - Invoke-Pester ./tests/ArchiveDiscovery.Tests.ps1, ./tests/ArchiveIndexDiscovery.Tests.ps1, ./tests/PermissionParity.Tests.ps1 with Pester 5.7.1&colon; 44/44 on PowerShell 7.2.24.
 - Parse repository PowerShell and JSON; Test-Json azd-permissions.json against canonical permission-requirements.schema.json; verify each code evidence SHA-256 over canonical UTF-8/LF source.
 - az bicep build --file ./infra/main.bicep --stdout; verify semantic equality with infra/main.json; Test-AzdBacklog.ps1; Export-AzdBacklogMarkdown.ps1 -Check; git diff --check.
+- 2026-10-10 JSON string repair&colon; Invoke-Pester ./tests with Pester 5.7.1 passed 86/86 on PowerShell 7.6.6; native synthetic HTTP proof distinguished DateTime conversion from preserved wire strings.
 
 **Dependencies:**
 
@@ -589,6 +590,7 @@ Operators need serial, hostname and primary-user lookup without exposing recover
 - 2026-10-07 source implementation from base c7b3e6eaa2a76722fc45c61b95084c41f93bab24&colon; each successful new recovery archive receives a separate closed, bounded, version-bound metadata index before Entra deletion. Default discovery remains metadata-only; explicit UPN lookup reads bounded index values, and explicit recovery validates the exact indexed archive version. Legacy latest aliases remain visible when a newer archive has no index. Optional relationship-based primary-user collection defaults false and never changes eligibility or heartbeat selection.
 - Validation&colon; PowerShell 7.6.6 / Pester 5.7.1 full suite 81/81 passed with zero failed, skipped or not-run; reader and permission suites on PowerShell 7.2.24 passed 44/44. Root independently replayed the full suite and parser, JSON, canonical permission schema and evidence hashes, Bicep, backlog rendering and diff checks. Independent exact 23-file review passed with a separate 49/49 focused replay; all ten earlier review findings were repaired. Failed r1 source and evidence were preserved.
 - Qualification remains source/offline only. The selected lab managedDevices read returned HTTP 403 before the direct users relationship was reached; cause remains unknown and no new permission was granted. No deployment, device action, real recovery read or human recovery drill was performed. Production deployment, effective grants, live relationship reads and recovery acceptance remain separate qualification work.
+- 2026-10-10 synthetic Key Vault lab contract failed when all four discovery/recovery lookups returned no match; its terminal receipt reports completed role, vault, tombstone and resource-group cleanup. A separate synthetic loopback HTTP proof on PowerShell 7.6.6 confirmed native Invoke-RestMethod converts ISO timestamp tags to DateTime, causing both strict legacy and index validators to refuse valid metadata. The reader now parses raw HTTP JSON with DateKind String and preserves timestamp-shaped recovery strings; 86/86 offline tests passed. This repairs the confirmed source defect but does not establish live service acceptance or a human recovery drill.
 
 **Review and authorization note:**
 

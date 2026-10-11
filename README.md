@@ -20,7 +20,7 @@ Install:
 
 - [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)
-- PowerShell 7
+- PowerShell 7.6 or later
 
 Use an Azure deployment operator who can deploy the resources and create Azure role assignments, and a feature operator who can create or update the configured Entra groups. Some environments already have the required Microsoft Graph permissions consented. If Graph consent has not been completed previously, the deployment may require a **Global Administrator or Privileged Role Administrator**. Defender for Endpoint follows its own consent path. Review [identity and authentication](docs/identity-and-authentication.md) for the exact permissions and role boundaries before production deployment.
 

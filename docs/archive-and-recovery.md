@@ -1,5 +1,11 @@
 # Archive and recovery
 
+The local archive reader requires PowerShell 7.6 or later. It preserves JSON
+strings when parsing Key Vault responses and recovery payloads, including
+timestamp-shaped tags, passwords and recovery keys. Metadata validation still
+rejects non-string tags; reading recovery values requires the explicit recovery
+option.
+
 ## Secret naming and lookup
 
 Secrets use this shape:

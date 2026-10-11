@@ -1,3 +1,4 @@
+#requires -Version 7.6
 param(
   [string] $KeyVaultName = '',
   [string] $Search = '',
@@ -126,7 +127,10 @@ function Invoke-KeyVaultJson {
       'Content-Type' = 'application/json'
     }
 
-    Invoke-RestMethod -Method $Method -Uri $Uri -Headers $headers -ErrorAction Stop
+    # Preserve JSON strings: automatic REST deserialization converts ISO timestamps
+    # in metadata tags and arbitrary recovery values into DateTime objects.
+    $response = Invoke-WebRequest -Method $Method -Uri $Uri -Headers $headers -ErrorAction Stop
+    $response.Content | ConvertFrom-Json -DateKind String -Depth 100 -ErrorAction Stop
   }
   catch {
     if ($_.Exception.Message -eq 'Azure CLI token acquisition failed.' -or
@@ -769,7 +773,7 @@ function Invoke-ArchivedDeviceLookup {
   }
 
   try {
-    $archivePayload = ([string]$secretValue) | ConvertFrom-Json -Depth 20 -ErrorAction Stop
+    $archivePayload = ([string]$secretValue) | ConvertFrom-Json -DateKind String -Depth 20 -ErrorAction Stop
   }
   catch {
     throw 'The archived secret payload could not be parsed.'

@@ -179,7 +179,7 @@ Describe 'Archived device reader safety boundaries' {
 
     It 'sanitizes Key Vault response exceptions across captured output streams' {
         Mock Get-KeyVaultAccessToken { return 'TOKEN_SENTINEL' }
-        Mock Invoke-RestMethod { throw 'raw response SECRET_SENTINEL value' }
+        Mock Invoke-WebRequest { throw 'raw response SECRET_SENTINEL value' }
 
         $output = Capture-Failure -Operation {
             Get-KeyVaultSecretMetadata -VaultName 'archive-vault'
@@ -192,17 +192,17 @@ Describe 'Archived device reader safety boundaries' {
     It 'follows a valid two-page metadata continuation without reading values' {
         $script:requestCalls = 0
         Mock Get-KeyVaultAccessToken { return 'TOKEN_SENTINEL' }
-        Mock Invoke-RestMethod {
+        Mock Invoke-WebRequest {
             $script:requestCalls++
             if ($script:requestCalls -eq 1) {
                 return [pscustomobject]@{
-                    value = @(New-ArchiveMetadata -Name 'one')
-                    nextLink = 'https://archive-vault.vault.azure.net/secrets?api-version=7.4&skiptoken=page2'
+                    Content = (@{ value = @(New-ArchiveMetadata -Name 'one')
+                    nextLink = 'https://archive-vault.vault.azure.net/secrets?api-version=7.4&skiptoken=page2' } | ConvertTo-Json -Depth 8)
                 }
             }
 
             return [pscustomobject]@{
-                value = @(New-ArchiveMetadata -Name 'two' -ArchivedAt '2026-09-01T00:00:00Z')
+                Content = (@{ value = @(New-ArchiveMetadata -Name 'two' -ArchivedAt '2026-09-01T00:00:00Z') } | ConvertTo-Json -Depth 8)
             }
         }
 
@@ -218,11 +218,11 @@ Describe 'Archived device reader safety boundaries' {
         $script:requestCalls = 0
         $script:tokenCalls = 0
         Mock Get-KeyVaultAccessToken { $script:tokenCalls++; return 'TOKEN_SENTINEL' }
-        Mock Invoke-RestMethod {
+        Mock Invoke-WebRequest {
             $script:requestCalls++
             return [pscustomobject]@{
-                value = @(New-ArchiveMetadata -Name 'one')
-                nextLink = 'https://archive-vault.vault.azure.net/secrets/recovery-name?api-version=7.4'
+                Content = (@{ value = @(New-ArchiveMetadata -Name 'one')
+                nextLink = 'https://archive-vault.vault.azure.net/secrets/recovery-name?api-version=7.4' } | ConvertTo-Json -Depth 8)
             }
         }
 
@@ -258,7 +258,7 @@ Describe 'Archived device reader safety boundaries' {
             $global:LASTEXITCODE = 1
             Write-Output 'TOKEN_SENTINEL'
         }
-        Mock Invoke-RestMethod { $script:requestCalls++ }
+        Mock Invoke-WebRequest { $script:requestCalls++ }
 
         try {
             $output = Capture-Failure -Operation {
@@ -283,7 +283,7 @@ Describe 'Archived device reader safety boundaries' {
             Write-Output 'TOKEN_ONE_SENTINEL'
             Write-Output 'TOKEN_TWO_SENTINEL'
         }
-        Mock Invoke-RestMethod { $script:requestCalls++ }
+        Mock Invoke-WebRequest { $script:requestCalls++ }
 
         try {
             $output = Capture-Failure -Operation {
@@ -316,7 +316,7 @@ Describe 'Archived device reader safety boundaries' {
         $script:tokenCalls = 0
         $script:requestCalls = 0
         Mock Get-KeyVaultAccessToken { $script:tokenCalls++; return 'TOKEN_SENTINEL' }
-        Mock Invoke-RestMethod { $script:requestCalls++ }
+        Mock Invoke-WebRequest { $script:requestCalls++ }
 
         $output = Capture-Failure -Operation {
             Invoke-KeyVaultJson -Method 'GET' -VaultName 'archive-vault' -Uri 'https://foreign.vault.azure.net/secrets?api-version=7.4'
@@ -345,12 +345,12 @@ Describe 'Explicit recovery transport URI' {
 
     It 'uses the exact selected secret URI through the real recovery helper' {
         Mock Get-KeyVaultAccessToken { 'offline-token' }
-        Mock Invoke-RestMethod { [pscustomobject]@{ id='https://archive-vault.vault.azure.net/secrets/archive-device/11111111111111111111111111111111';contentType='application/json';value='{}' } }
+        Mock Invoke-WebRequest { [pscustomobject]@{ Content='{"id":"https://archive-vault.vault.azure.net/secrets/archive-device/11111111111111111111111111111111","contentType":"application/json","value":"{}"}' } }
 
         $value = Get-KeyVaultSecretValue -VaultName 'archive-vault' -SecretName 'archive-device'
 
         $value.value | Should -Be '{}'
-        Should -Invoke Invoke-RestMethod -Times 1 -Exactly -ParameterFilter {
+        Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter {
             $Method -eq 'GET' -and $Uri -ceq 'https://archive-vault.vault.azure.net/secrets/archive-device?api-version=7.4'
         }
     }
