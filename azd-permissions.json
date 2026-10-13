@@ -154,6 +154,7 @@
     "The manifest is partial: deployment bootstrap permissions, exact Azure resource-provider actions, role-assignment authority, Entra group create/update authority, consent administrator roles, and cleanup permissions have not been reduced to a complete least-privilege inventory.",
     "Code evidence records intended app-role and Azure RBAC reconciliation; it does not prove tenant consent, effective assignments, licensing, service availability, or live support.",
     "A bounded read-only check on 2026-10-07 reached the selected lab tenant's managedDevices collection and received HTTP 403 before the direct users route could be reached. Access and visibility qualification remains blocked; the evidence does not identify permission, licensing, role, or another tenant condition as the cause and does not establish that the relationship route is unsupported.",
-    "No deployment, device action, archive creation, archive read, primary-user read, consent grant, or human recovery drill was performed for this manifest."
+    "No deployment, device action, archive creation, archive read, primary-user read, consent grant, or human recovery drill was performed for this manifest.",
+    "Optional Intune managed-device removal is design-only. A future implementation would require DeviceManagementManagedDevices.ReadWrite.All application permission, administrator consent, active Intune tenant licensing, exact-target authorization, and separate live qualification. That permission is intentionally not requested or granted by the current solution."
   ]
 }

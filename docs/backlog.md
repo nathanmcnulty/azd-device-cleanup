@@ -388,7 +388,7 @@ Review CLEAN-002 against the current repository state. Its status or authorizati
 
 - **Kind:** discovery
 - **Priority:** P2
-- **Status:** proposed
+- **Status:** done
 - **Wave:** 3
 - **Authorization:** local-only
 - **Blocker:** _none_
@@ -428,7 +428,10 @@ Post-v1 proposes Intune removal; Graph success and archival are strict prerequis
 
 **Evidence:**
 
-- _none_
+- At source baseline 08f5efa647f94d1414447973b6ee036a130c68b1, docs/intune-removal-plan.md defines an inert closed plan contract that keeps tenantId, Entra object id, Entra deviceId, Intune managedDevice id, exact archive/index versions and cleanupRunId distinct and bound. It requires unique non-collapsing pre-archive discovery, exact-version archive readback, Entra DELETE acknowledgement plus direct absence observation, and post-Entra direct Intune target revalidation; labels, users, same-tenant relationships and newest-heartbeat selection cannot establish ownership or authorization.
+- The refusal matrix blocks absent, incomplete, ambiguous, foreign, unknown, stale or conflicting evidence. Existing archivedDeletedDevices rows and archive-index v1.0 cannot mint a trustworthy plan after the fact because the summary drops SecretVersion and IndexSecretName while the index has no tenantId and permits a null Intune id. A future dedicated collector must create contemporaneous tenant-bound evidence; implementation, permission grant and live deletion remain separate authorized tasks.
+- Microsoft Graph v1.0 documentation reviewed 2026-10-13 identifies DELETE /deviceManagement/managedDevices/{managedDeviceId} with DeviceManagementManagedDevices.ReadWrite.All and active Intune tenant licensing. The design excludes the separate retire/wipe device actions. PowerShell 7.6.6 parser, JSON, canonical permission and backlog schemas, generated backlog, Markdown links, contract-example binding, git diff check and Pester 5.7.1 passed, 86/86. Pinned Bicep 0.46.1 compiled successfully and differed from tracked compiler 0.42.1 output only in nested &lowbar;generator version/hash metadata. No tenant/auth/archive/provider call, deletion, permission grant, schedule, infrastructure or default change ran.
+- Independent review passed both original discovery/design criteria on 2026-10-13, including exact source mappings, unchanged current permission requirements, synthetic contract consistency and fresh primary Microsoft API documentation. This closes the design item only; no schema/generator/executor, deletion authorization, live absence or endpoint outcome is implemented or proven.
 
 **Review and authorization note:**
 
