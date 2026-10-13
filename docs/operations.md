@@ -70,6 +70,7 @@ If Defender sources are unavailable, the run skips disable/delete actions rather
 - Archived device records now include correlation metadata (`cleanupRunId`, heartbeat source, and per-system identifiers) to make notifications and recovery lookups line up.
 - The current implementation deletes only the Entra device. Intune and Defender for Endpoint cleanup can be added around the same archive record later.
 - The post-v1 [Intune managed-device removal plan](intune-removal-plan.md) defines the inert identity, receipt, provenance, and refusal contract. It adds no Intune write path or permission.
+- The post-v1 [Defender machine cleanup API assessment](defender-cleanup-design.md) records that the reviewed published API surface has no supported machine-record deletion route. Offboarding is a separate endpoint lifecycle action and is not an automatic fallback.
 
 ## Cleanup
 

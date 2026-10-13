@@ -441,7 +441,7 @@ Review CLEAN-003 against the current repository state. Its status or authorizati
 
 - **Kind:** discovery
 - **Priority:** P2
-- **Status:** proposed
+- **Status:** done
 - **Wave:** 3
 - **Authorization:** local-only
 - **Blocker:** _none_
@@ -481,7 +481,10 @@ Post-v1 proposes MDE removal with separate consent and API boundaries.
 
 **Evidence:**
 
-- _none_
+- At source baseline 2e5386f4da4537ee951037d11db41b3896c4f64b, current Microsoft primary documentation reviewed 2026-10-13 showed no supported machine-record deletion route in the published Defender for Endpoint API catalog. docs/defender-cleanup-design.md records this bounded unsupported gap without claiming universal absence. It documents the exact-ID offboard POST and its Machine.Offboard permission only as a separate endpoint lifecycle operation that is not chosen as an automatic deletion fallback.
+- The design distinguishes tenantId, Entra object id, Entra deviceId, Defender machine id, cleanupRunId and exact archive/index versions. It refuses hostname and latest-heartbeat inference, duplicate aadDeviceId rows, nullable or hunting-only machine IDs, mixed or stale evidence and absent exact-target authorization. Existing source collapses duplicate Defender inventory/hunting rows, archive-index v1.0 has no tenant binding, and the job summary loses archive/index versions, so existing records cannot mint a trustworthy action plan after the fact.
+- Published route requirements are recorded without granting or claiming effective permission&colon; Machine.Read.All for inventory, Machine.Offboard for the separate offboard action, and the broad Machine.ReadWrite.All currently documented for exact-machine and machine-action reads as a least-privilege qualification gap. PowerShell 7.6.6 parser, JSON, canonical permission/backlog schemas, generated backlog, Markdown links, original-criteria preservation, protected-path comparison, git diff check and Pester 5.7.1 passed 86/86. Pinned Bicep 0.46.1 compiled successfully and differed from tracked output only in nested &lowbar;generator version/hash metadata. No auth, provider, archive, tenant, endpoint action, permission grant, schedule, infrastructure, runtime, schema or default change ran.
+- Independent review passed both original discovery criteria on 2026-10-13&colon; fresh primary API/permission documentation, the explicitly bounded unsupported deletion gap, real-source identity/provenance limitations, and no implied destructive authorization. This closes the design assessment only; offboarding is not selected, no executor or permission is added, and no service or endpoint result is proven.
 
 **Review and authorization note:**
 
