@@ -22,6 +22,12 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify PowerShell 7.6 or newer
+        run: |
+          if ($PSVersionTable.PSVersion -lt [version]'7.6' -or -not [Environment]::Is64BitProcess) {
+            throw "Expected 64-bit PowerShell 7.6 or newer; observed $($PSVersionTable.PSVersion)."
+          }
+          Write-Output "PowerShell $($PSVersionTable.PSVersion); 64-bit=$([Environment]::Is64BitProcess)"
       - name: Parse PowerShell
         run: |
           $errors = @()
