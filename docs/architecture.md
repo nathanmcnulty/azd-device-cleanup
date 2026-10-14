@@ -146,7 +146,13 @@ The deployment identity running `scripts\postprovision.ps1` must have sufficient
 ### Dynamic group examples
 
 - Intune stale devices: `device.extensionAttribute14 -startsWith "Stale|"`
-- Defender not onboarded devices: `device.extensionAttribute15 -eq "NotOnboarded|none"`
+
+The current Defender heartbeat attribute must not be treated as proof of a
+NotOnboarded cohort because missing or retention-limited source data can produce
+that label. The separate [offline device dynamic-group proposal](device-group-proposals.md)
+requires an exact, unique, fresh `CanBeOnboarded` machine record and a different
+administrator-owned attribute slot before it will classify a prospective
+NotOnboarded member.
 
 ## Ownership and state
 
