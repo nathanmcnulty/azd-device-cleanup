@@ -150,14 +150,15 @@
       "title": "Add optional NotOnboarded and Unmanaged dynamic-group proposals",
       "kind": "feature",
       "priority": "P2",
-      "status": "proposed",
+      "status": "done",
       "wave": 3,
       "problem": "The existing stale groups do not express these additional cohorts.",
       "scope": [
         "scripts/",
         "infra/",
         "docs/",
-        "azd-permissions.json"
+        "azd-permissions.json",
+        "tests/ (actual local proposal/classifier and disabled-boundary fixtures)"
       ],
       "acceptance": [
         "Preview membership and valid rule syntax from fixtures before any group creation.",
@@ -170,10 +171,22 @@
       "authorization": "local-only",
       "components": [],
       "sources": [
-        "TODO.md"
+        "TODO.md",
+        "docs/device-group-proposals.md",
+        "https://learn.microsoft.com/entra/identity/users/groups-dynamic-membership#rules-for-devices",
+        "https://learn.microsoft.com/defender-endpoint/api/get-machines",
+        "https://learn.microsoft.com/defender-endpoint/api/machine"
       ],
-      "evidence": [],
-      "blocker": null
+      "evidence": [
+        "At source baseline 0c5290ee1f91bf796d6c01b07ad638995a2d072e, scripts/New-DeviceDynamicGroupProposal.ps1 adds a default-disabled local-only proposal CLI. It produces deterministic prospective and existing-attribute previews from bounded provided fixtures, round-trips only the two canonical extensionAttribute equality rules, reports an empty permission set, publisherPresent=false and groupCreationReady=false, and contains no provider, attribute, group or lifecycle action path.",
+        "Unmanaged inclusion requires a complete fresh Intune fixture with no exact managedDevice.azureADDeviceId match. NotOnboarded inclusion requires exactly one fresh valid Defender machine record with an exact aadDeviceId match and onboardingStatus CanBeOnboarded. Tenant/hash/freshness mismatch, unavailable/NoData/incomplete collection, absent or ambiguous Defender matches, malformed or duplicate identity, unsupported state, and unowned or stale current attributes remain Unknown. The fixture declarations establish only provided-fixture consistency, not authenticated capture, ownership, authorization or published state.",
+        "PowerShell 7.6.6 parsed 16 files with zero errors. Pester 5.7.1 passed 109/109 with zero failed, skipped or not-run tests. Eight JSON files parsed; canonical backlog and permission schemas, both proposal fixture schemas, backlog semantics and generated Markdown, original criteria and unrelated-record preservation, relative Markdown links, protected runtime/workflow/infrastructure byte comparison, and tracked/new-file whitespace checks passed. Bicep was not recompiled because infra/main.bicep and its tracked JSON and parameters match the verified baseline bytes; hosted validation will compile the unchanged source. No authentication, provider, tenant, archive, endpoint, permission, attribute, group, lifecycle, schedule or infrastructure action ran.",
+        "Independent review correction validates raw JSON collection and scalar types before classification: object-shaped devices or records, array-shaped GUIDs, malformed attribute objects, and non-integer attribute slots remain bounded Unknown instead of being coerced into positive evidence. Prospective and existing-attribute previews remain independent, valid empty Intune records remain a complete no-match inventory, and kind values are normalized before rule round-trip checks. Focused Pester 5.7.1 passed 32/32 with zero failed, skipped or not-run tests on PowerShell 7.6.6. The earlier full 109/109 result is inherited and was not rerun for this narrow correction; hosted validation will run the full suite.",
+        "The consolidated scalar-contract correction preserves JSON arrays only for declared devices and records collections. Every declared provider-fixture scalar is type-checked before comparison or parsing; singleton arrays for Defender machine id, onboardingStatus, source type, collection state, fixture schemaVersion or fixture kind cannot qualify membership. ConvertFrom-Json -NoEnumerate plus an explicit top-level object check also rejects a singleton top-level JSON array. Actual helper and file-CLI regressions passed in focused Pester 5.7.1: 39/39 with zero failed, skipped or not-run tests on PowerShell 7.6.6. Other suites were unchanged and not rerun; the earlier full 109/109 result remains inherited and hosted validation remains pending.",
+        "Independent actual-helper and file-CLI review passed the complete scalar/collection boundary on PowerShell 7.6.6, preserving valid empty arrays and prospective/current-attribute independence. Both original local-only criteria are implemented. Focused Pester 5.7.1 passed 39/39 with no failures or skips; prior 109-test full-suite evidence is inherited for unchanged areas, not a full corrected-source rerun. Fresh hosted full validation and compilation are publication gates before merge. This completion records only offline provided-fixture proposals: authenticated capture, ownership, attribute publishing, Entra service-side rule validation, group creation, effective permissions and lifecycle integration remain separate unimplemented or unproven work."
+      ],
+      "blocker": null,
+      "claim": null
     },
     {
       "id": "CLEAN-006",
