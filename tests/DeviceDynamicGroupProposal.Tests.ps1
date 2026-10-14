@@ -34,7 +34,7 @@ Describe 'Offline device dynamic-group proposals' {
       $attributeNumber = if ($isUnmanaged) { 14 } else { 13 }
       $attributeOwner = if ($isUnmanaged) { 'fixture-admin/intune-state' } else { 'fixture-admin/defender-onboarding' }
       $evidenceSha256 = if ($isUnmanaged) { 'a' * 64 } else { 'b' * 64 }
-      $output = & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File $script:proposalPath -Mode Preview -Kind $Kind `
+      $output = & ((Get-Process -Id $PID).Path) -NoProfile -File $script:proposalPath -Mode Preview -Kind $Kind `
         -FixturePath $FixturePath -TenantId $script:tenantId -AttributeNumber $attributeNumber `
         -AttributeOwner $attributeOwner -EvidenceSha256 $evidenceSha256 `
         -MaximumEvidenceAgeHours 24 -ReferenceTimeUtc $script:referenceTime 2>&1
