@@ -1,3 +1,4 @@
+#Requires -Version 7.6
 function Get-RequiredGraphPermissionNames {
   param(
     [Parameter(Mandatory = $true)][int] $IntuneCheckInAttributeNumber,

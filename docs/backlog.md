@@ -7,7 +7,7 @@
 - **Repository:** nathanmcnulty/azd-device-cleanup
 - **Source revision:** `2f1631f220268e86d406e1b8846de4c296ec9b07`
 - **Captured:** 2026-10-04
-- **Items:** 13
+- **Items:** 14
 
 ## CLEAN-001: Reconcile this backlog with current source and active work
 
@@ -114,6 +114,61 @@ Read-only reconciliation identified a resolved current-main defect missing from 
 **Review and authorization note:**
 
 Review CLEAN-011 against the current repository state. Its status or authorization class is not eligible for an actionable generated handoff. Do not claim or execute it without explicit selection, satisfied dependencies, and every required authorization. Never interpret this generated view as approval.
+
+## CLEAN-014: Complete the supported PowerShell and Pester validation baseline
+
+- **Kind:** maintenance
+- **Priority:** P1
+- **Status:** done
+- **Wave:** 0
+- **Authorization:** local-only
+- **Blocker:** _none_
+- **Claim:** _none_
+
+**Problem:**
+
+CI still selected Pester 5.7.1 and could accept inconclusive or skipped tests; several maintained entrypoints had no runtime declaration.
+
+**Scope:**
+
+- Owned authoring/runbook runtime declarations and POSIX prerequisite message
+- CI runtime/Pester selection and complete-outcome gate
+- Contributor validation guidance and permission evidence hashes
+
+**Acceptance:**
+
+- Owned script/runbook entrypoints require PowerShell 7.6+; CI uses verified PowerShell 7.6.6 and exact Pester 6.2.0.
+- Every registered test passes; missing, empty, failed, skipped, inconclusive or unexecuted results fail CI.
+- Preserve device action defaults, archive/recovery transport, wire dates, permissions and notification draft history.
+
+**Validation:**
+
+- Import-Module Pester -RequiredVersion 6.2.0 -Force; Invoke-Pester ./tests -PassThru
+- Parse owned PowerShell and JSON; build infra/main.bicep without changing tracked generated output.
+- Validate canonical backlog schema, regenerate docs/backlog.md and verify permission-evidence hashes.
+- Exercise actual original/current CI Pester blocks against isolated pass, inconclusive, mixed-skip, all-skip, empty and failure fixtures.
+
+**Dependencies:**
+
+- _none_
+
+**Components:**
+
+- _none_
+
+**Sources:**
+
+- https&colon;//github.com/nathanmcnulty/azd-device-cleanup/issues/22
+
+**Evidence:**
+
+- Reviewed exact current main 54d827649f00e1956faa5cfe2c7915bfde47eef7 and open notification draft &num;18 before editing. All six owned script/runbook files now declare PowerShell 7.6 &lpar;five added guards&rpar;; the POSIX missing-runtime message agrees. CI installs/imports exact Pester 6.2.0 and selects the reviewed SHA-256-verified PowerShell 7.6.6 archive; contributor validation enforces the same no-omission result contract.
+- Full PowerShell 7.6.6/.NET 10.0.12/Pester 6.2.0 suite passes 125/125 with zero failed, skipped, inconclusive or unexecuted tests; parser, JSON, Bicep 0.42.1 and canonical permission schema pass. Only LF UTF-8 source-evidence hashes changed in azd-permissions.json after adding declarations; permission semantics and existing safety tests are unchanged. No Azure/authentication, device action, archive read or tenant cleanup occurred. CLEAN-002 native recovery gate remains open.
+- Twelve isolated PowerShell 7.6.6/Pester 6.2.0 processes execute the actual original/current CI Pester blocks. The original accepts inconclusive, mixed-skipped and all-skipped fixtures; the corrected gate accepts only the passing fixture and rejects those cases plus empty and failing suites. Registered product tests and assertions remain intact.
+
+**Review and authorization note:**
+
+Review CLEAN-014 against the current repository state. Its status or authorization class is not eligible for an actionable generated handoff. Do not claim or execute it without explicit selection, satisfied dependencies, and every required authorization. Never interpret this generated view as approval.
 
 ## CLEAN-009: Add a batch safety limit for the default device-disabling action
 
