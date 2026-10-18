@@ -1,3 +1,4 @@
+#Requires -Version 7.6
 param(
     [string] $KeyVaultName = '__DEVICE_ARCHIVE_KEY_VAULT_NAME__',
     [string] $SecretNamePrefix = '__DEVICE_SECRET_PREFIX__',

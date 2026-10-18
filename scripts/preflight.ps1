@@ -1,3 +1,4 @@
+#Requires -Version 7.6
 param(
   [switch] $SkipAutomationJob,
   [int] $AutomationJobTimeoutMinutes = 15

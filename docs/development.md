@@ -4,7 +4,7 @@ Contributor tooling is not part of the administrator quickstart.
 
 ## Validate
 
-From the repository root:
+Use PowerShell 7.6+ and Pester 6.2.0. CI selects a SHA-256-verified PowerShell 7.6.6 runtime. From the repository root:
 
 ```powershell
 $errors = @()
@@ -15,6 +15,13 @@ Get-ChildItem . -Recurse -File | Where-Object Extension -In '.ps1', '.psm1', '.p
   $errors += @($parseErrors)
 }
 if ($errors.Count) { throw ($errors | Format-List | Out-String) }
+
+Install-Module Pester -RequiredVersion 6.2.0 -Scope CurrentUser -Force
+Import-Module Pester -RequiredVersion 6.2.0 -Force
+$result = Invoke-Pester -Path ./tests -PassThru
+if ($null -eq $result -or $result.Result -ne 'Passed' -or $result.TotalCount -eq 0 -or $result.SkippedCount -or $result.InconclusiveCount -or $result.NotRunCount) {
+  throw 'Every registered device safety test must pass without omissions.'
+}
 
 az bicep build --file .\infra\main.bicep
 git diff --exit-code -- .\infra\main.json

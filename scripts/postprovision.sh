@@ -3,7 +3,7 @@
 set -eu
 
 if ! command -v pwsh >/dev/null 2>&1; then
-  echo 'PowerShell 7 (pwsh) is required to run the Azure Automation post-provision steps on POSIX systems.' >&2
+  echo 'PowerShell 7.6+ (pwsh) is required to run the Azure Automation post-provision steps on POSIX systems.' >&2
   exit 1
 fi
 
