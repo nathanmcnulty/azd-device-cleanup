@@ -39,8 +39,16 @@ param logicAppNotificationsEnabled bool = true
 param logicAppNotificationWorkflowName string = ''
 
 @secure()
-@description('Optional downstream webhook URL that the Logic App should forward notifications to, such as a Teams workflow trigger URL.')
+@description('Optional HTTPS webhook receiving the bounded notification envelope; existing consumers must migrate to schemaVersion 1.0.')
 param logicAppNotificationWebhookUrl string = ''
+
+@secure()
+@description('Optional HTTPS Teams Workflow webhook receiving the Adaptive Card message. Empty disables this route.')
+param logicAppTeamsWebhookUrl string = ''
+
+@secure()
+@description('Optional HTTPS email workflow webhook receiving subject/text/html. Its owner selects recipients and sending credentials; empty disables this route.')
+param logicAppEmailWebhookUrl string = ''
 
 @description('Send notifications for successful cleanup runs.')
 param logicAppNotifyOnSuccess bool = true
@@ -185,6 +193,8 @@ module resources './resources.bicep' = {
     cleanupScheduleTimeZone: cleanupScheduleTimeZone
     keyVaultName: vaultName
     logicAppNotificationWebhookUrl: logicAppNotificationWebhookUrl
+    logicAppTeamsWebhookUrl: logicAppTeamsWebhookUrl
+    logicAppEmailWebhookUrl: logicAppEmailWebhookUrl
     logicAppNotificationWorkflowName: logicAppWorkflowName
     logicAppNotificationsEnabled: logicAppNotificationsEnabled
     location: location

@@ -1,0 +1,23 @@
+{
+  "manifestVersion": "1.0",
+  "components": [
+    {
+      "id": "notification-contracts",
+      "version": "1.0.0",
+      "sourceRepository": "https://github.com/nathanmcnulty/azd-reference",
+      "sourceRevision": "6dc5841a3156b904b89f0f4ff8d97207a26ec15a",
+      "files": [
+        {
+          "source": "schemas/notification-envelope.schema.json",
+          "target": "contracts/notifications/notification-envelope.schema.json",
+          "sha256": "627f13be9f5d5813cc350423d164c9bce97d56c3b050cfa753f8f702ee193b4e"
+        },
+        {
+          "source": "schemas/notification-delivery-result.schema.json",
+          "target": "contracts/notifications/notification-delivery-result.schema.json",
+          "sha256": "180f0bf8c23cf1797c5bf52f8cb66b79cb947145e03cc60d51d1c73d5ae2e552"
+        }
+      ]
+    }
+  ]
+}

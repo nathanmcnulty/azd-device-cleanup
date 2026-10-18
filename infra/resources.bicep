@@ -31,6 +31,14 @@ param logicAppNotificationWorkflowName string
 @description('Optional downstream webhook URL that the Logic App should forward notifications to, such as a Teams workflow trigger URL.')
 param logicAppNotificationWebhookUrl string = ''
 
+@secure()
+@description('Optional Teams Workflow HTTPS callback. Empty disables this route.')
+param logicAppTeamsWebhookUrl string = ''
+
+@secure()
+@description('Optional owner-managed email workflow HTTPS callback. Empty disables this route.')
+param logicAppEmailWebhookUrl string = ''
+
 @allowed([
   'Day'
   'Hour'
@@ -137,6 +145,11 @@ resource schedule 'Microsoft.Automation/automationAccounts/schedules@2024-10-23'
   }
 }
 
+// Canonical contract bytes remain immutable. This solution-owned structural
+// projection inlines its local refs/const; pre-routing actions enforce patterns.
+// Format annotations are not provider assertions. Tests bind the full mapping.
+var providerNotificationSchema = loadJsonContent('notification-schema.json')
+
 resource notificationWorkflow 'Microsoft.Logic/workflows@2019-05-01' = if (logicAppNotificationsEnabled) {
   name: logicAppNotificationWorkflowName
   location: location
@@ -151,7 +164,15 @@ resource notificationWorkflow 'Microsoft.Logic/workflows@2019-05-01' = if (logic
           defaultValue: false
         }
         notificationWebhookUrl: {
-          type: 'String'
+          type: 'SecureString'
+          defaultValue: ''
+        }
+        teamsWebhookUrl: {
+          type: 'SecureString'
+          defaultValue: ''
+        }
+        emailWebhookUrl: {
+          type: 'SecureString'
           defaultValue: ''
         }
       }
@@ -159,95 +180,21 @@ resource notificationWorkflow 'Microsoft.Logic/workflows@2019-05-01' = if (logic
         manual: {
           type: 'Request'
           kind: 'Http'
+          operationOptions: 'EnableSchemaValidation'
+          runtimeConfiguration: { secureData: { properties: ['inputs', 'outputs'] } }
           inputs: {
-            schema: {
-              type: 'object'
-              properties: {
-                environmentName: {
-                  type: 'string'
-                }
-                subscriptionId: {
-                  type: 'string'
-                }
-                resourceGroupName: {
-                  type: 'string'
-                }
-                automationAccountName: {
-                  type: 'string'
-                }
-                runbookName: {
-                  type: 'string'
-                }
-                status: {
-                  type: 'string'
-                }
-                severity: {
-                  type: 'string'
-                }
-                summaryText: {
-                  type: 'string'
-                }
-                startedAtUtc: {
-                  type: 'string'
-                }
-                finishedAtUtc: {
-                  type: 'string'
-                }
-                counts: {
-                  type: 'object'
-                }
-                results: {
-                  type: 'object'
-                }
-                failure: {
-                  type: 'object'
-                }
-              }
-              required: [
-                'environmentName'
-                'status'
-                'severity'
-                'summaryText'
-                'startedAtUtc'
-                'finishedAtUtc'
-              ]
-            }
+            method: 'POST'
+            schema: providerNotificationSchema
           }
         }
       }
-      actions: {
-        Forward_to_downstream_webhook: {
-          type: 'If'
-          expression: {
-            and: [
-              {
-                equals: [
-                  '@parameters(\'forwardNotifications\')'
-                  true
-                ]
-              }
-            ]
-          }
-          actions: {
-            Post_notification: {
-              type: 'Http'
-              inputs: {
-                method: 'POST'
-                uri: '@parameters(\'notificationWebhookUrl\')'
-                headers: {
-                  'Content-Type': 'application/json'
-                }
-                body: '@triggerBody()'
-              }
-            }
-          }
-          else: {
-            actions: {}
-          }
-          runAfter: {}
-        }
+      // Validation is common; destination routes remain independent siblings.
+      actions: loadJsonContent('notification-actions.json')
+      outputs: {
+        envelopeRouteStatus: { type: 'String', value: '@coalesce(actions(\'Post_notification\')?[\'status\'], \'Skipped\')' }
+        teamsRouteStatus: { type: 'String', value: '@coalesce(actions(\'Post_teams\')?[\'status\'], \'Skipped\')' }
+        emailRouteStatus: { type: 'String', value: '@coalesce(actions(\'Post_email\')?[\'status\'], \'Skipped\')' }
       }
-      outputs: {}
     }
     parameters: {
       forwardNotifications: {
@@ -256,6 +203,8 @@ resource notificationWorkflow 'Microsoft.Logic/workflows@2019-05-01' = if (logic
       notificationWebhookUrl: {
         value: logicAppNotificationWebhookUrl
       }
+      teamsWebhookUrl: { value: logicAppTeamsWebhookUrl }
+      emailWebhookUrl: { value: logicAppEmailWebhookUrl }
     }
     state: 'Enabled'
   }

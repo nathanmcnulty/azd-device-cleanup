@@ -17,7 +17,7 @@
       "scope": "tenant",
       "rationale": "Read Entra device identity, state, extension attributes, and heartbeat metadata.",
       "evidenceState": "code",
-      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "4d529d9b03e56f546f60c6278601d11fe97e610d7ef18cb33531349e8e4b66af"}]
+      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "6c2080d96cf46a79ef71d739d67821df065b3e885d86a59d6151bdb9cb940f9c"}]
     },
     {
       "resource": "https://graph.microsoft.com",
@@ -30,7 +30,7 @@
       "scope": "tenant",
       "rationale": "Write derived extension attributes, disable stale devices, and delete only explicitly enabled eligible devices after archive and index success.",
       "evidenceState": "code",
-      "evidence": [{"path": "runbooks/DeviceCleanup.ps1", "sha256": "9cdadf29270b9de2123115b354f9c4e84b08c11029caa8020947cc994e0dfd3c"}]
+      "evidence": [{"path": "runbooks/DeviceCleanup.ps1", "sha256": "3f88dc2f95b58e66da2ca7e021a700501cb50db613412822313e2b0c0555ca97"}]
     },
     {
       "resource": "https://graph.microsoft.com",
@@ -43,7 +43,7 @@
       "scope": "tenant",
       "rationale": "Resolve the configured exclusion group used by cleanup safety checks.",
       "evidenceState": "code",
-      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "4d529d9b03e56f546f60c6278601d11fe97e610d7ef18cb33531349e8e4b66af"}]
+      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "6c2080d96cf46a79ef71d739d67821df065b3e885d86a59d6151bdb9cb940f9c"}]
     },
     {
       "resource": "https://graph.microsoft.com",
@@ -56,7 +56,7 @@
       "scope": "configured-exclusion-group",
       "rationale": "Read direct device membership of the configured exclusion group.",
       "evidenceState": "code",
-      "evidence": [{"path": "runbooks/DeviceCleanup.ps1", "sha256": "9cdadf29270b9de2123115b354f9c4e84b08c11029caa8020947cc994e0dfd3c"}]
+      "evidence": [{"path": "runbooks/DeviceCleanup.ps1", "sha256": "3f88dc2f95b58e66da2ca7e021a700501cb50db613412822313e2b0c0555ca97"}]
     },
     {
       "resource": "https://graph.microsoft.com",
@@ -69,7 +69,7 @@
       "scope": "tenant",
       "rationale": "Read Windows LAPS credentials for an archive-producing delete candidate.",
       "evidenceState": "code",
-      "evidence": [{"path": "runbooks/DeviceCleanup.ps1", "sha256": "9cdadf29270b9de2123115b354f9c4e84b08c11029caa8020947cc994e0dfd3c"}]
+      "evidence": [{"path": "runbooks/DeviceCleanup.ps1", "sha256": "3f88dc2f95b58e66da2ca7e021a700501cb50db613412822313e2b0c0555ca97"}]
     },
     {
       "resource": "https://graph.microsoft.com",
@@ -82,7 +82,7 @@
       "scope": "tenant",
       "rationale": "Read BitLocker recovery material for an archive-producing delete candidate.",
       "evidenceState": "code",
-      "evidence": [{"path": "runbooks/DeviceCleanup.ps1", "sha256": "9cdadf29270b9de2123115b354f9c4e84b08c11029caa8020947cc994e0dfd3c"}]
+      "evidence": [{"path": "runbooks/DeviceCleanup.ps1", "sha256": "3f88dc2f95b58e66da2ca7e021a700501cb50db613412822313e2b0c0555ca97"}]
     },
     {
       "resource": "https://graph.microsoft.com",
@@ -95,7 +95,7 @@
       "scope": "tenant",
       "rationale": "Read Intune heartbeat data by default and, when explicitly enabled, the bounded managed-device primary-user relationship.",
       "evidenceState": "code",
-      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "4d529d9b03e56f546f60c6278601d11fe97e610d7ef18cb33531349e8e4b66af"}]
+      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "6c2080d96cf46a79ef71d739d67821df065b3e885d86a59d6151bdb9cb940f9c"}]
     },
     {
       "resource": "https://graph.microsoft.com",
@@ -108,7 +108,7 @@
       "scope": "tenant",
       "rationale": "Run the optional advanced-hunting heartbeat query when the default-enabled feature is configured.",
       "evidenceState": "code",
-      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "4d529d9b03e56f546f60c6278601d11fe97e610d7ef18cb33531349e8e4b66af"}]
+      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "6c2080d96cf46a79ef71d739d67821df065b3e885d86a59d6151bdb9cb940f9c"}]
     },
     {
       "resource": "https://api.securitycenter.microsoft.com",
@@ -121,7 +121,7 @@
       "scope": "tenant",
       "rationale": "Read Defender machine heartbeat data when its extension-attribute slot is enabled.",
       "evidenceState": "code",
-      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "4d529d9b03e56f546f60c6278601d11fe97e610d7ef18cb33531349e8e4b66af"}]
+      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "6c2080d96cf46a79ef71d739d67821df065b3e885d86a59d6151bdb9cb940f9c"}]
     },
     {
       "resource": "https://vault.azure.net",
@@ -134,7 +134,7 @@
       "scope": "solution-archive-key-vault",
       "rationale": "Create versioned recovery archives and their version-bound metadata indexes.",
       "evidenceState": "code",
-      "evidence": [{"path": "infra/resources.bicep", "sha256": "02d073ff1fe86a4e22c960ee5662751e37d6d009cbbb087d43ef96ce924814ca"}]
+      "evidence": [{"path": "infra/resources.bicep", "sha256": "0831b9ea6c2cc4fc9535597b5c0c4dff3848f70032eebf6b089bd887f5821374"}]
     },
     {
       "resource": "https://vault.azure.net",
@@ -147,16 +147,13 @@
       "scope": "solution-archive-key-vault",
       "rationale": "Allow only members of the configured assigned recovery group to perform explicit archive recovery reads.",
       "evidenceState": "code",
-      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "4d529d9b03e56f546f60c6278601d11fe97e610d7ef18cb33531349e8e4b66af"}]
+      "evidence": [{"path": "scripts/postprovision.ps1", "sha256": "6c2080d96cf46a79ef71d739d67821df065b3e885d86a59d6151bdb9cb940f9c"}]
     }
   ],
   "gaps": [
     "The manifest is partial: deployment bootstrap permissions, exact Azure resource-provider actions, role-assignment authority, Entra group create/update authority, consent administrator roles, and cleanup permissions have not been reduced to a complete least-privilege inventory.",
     "Code evidence records intended app-role and Azure RBAC reconciliation; it does not prove tenant consent, effective assignments, licensing, service availability, or live support.",
     "A bounded read-only check on 2026-10-07 reached the selected lab tenant's managedDevices collection and received HTTP 403 before the direct users route could be reached. Access and visibility qualification remains blocked; the evidence does not identify permission, licensing, role, or another tenant condition as the cause and does not establish that the relationship route is unsupported.",
-    "No deployment, device action, archive creation, archive read, primary-user read, consent grant, or human recovery drill was performed for this manifest.",
-    "Optional Intune managed-device removal is design-only. A future implementation would require DeviceManagementManagedDevices.ReadWrite.All application permission, administrator consent, active Intune tenant licensing, exact-target authorization, and separate live qualification. That permission is intentionally not requested or granted by the current solution.",
-    "The reviewed Microsoft Defender for Endpoint API catalog documents no supported machine-record deletion route. Offboarding is a separate endpoint lifecycle operation, not a deletion fallback. Its published Machine.Offboard permission and the broad Machine.ReadWrite.All currently documented for exact-machine and machine-action readback are not requested or granted; any future offboard proposal requires separate authorization and live qualification.",
-    "Optional Unmanaged and NotOnboarded dynamic-group proposals are local fixture analysis only and require no Graph permission. No attribute publisher or group creation path is implemented. Future service reads, attribute writes, group creation, licensing qualification, and service-side rule validation require separate permission analysis and authorization."
+    "No deployment, device action, archive creation, archive read, primary-user read, consent grant, or human recovery drill was performed for this manifest."
   ]
 }

@@ -52,7 +52,9 @@ jobs:
             $errors += @($fileErrors)
           }
           if ($errors.Count) { throw ($errors | Out-String) }
-      - name: Test device action safety
+      - name: Install Bicep
+        run: az bicep install --version v0.46.1
+      - name: Test device action safety and notification workflow
         run: |
           Install-Module Pester -RequiredVersion 6.2.0 -Scope CurrentUser -Force -SkipPublisherCheck
           Import-Module Pester -RequiredVersion 6.2.0 -Force
@@ -63,7 +65,3 @@ jobs:
           Get-ChildItem -Path . -Recurse -File -Filter *.json | ForEach-Object {
             Get-Content $_.FullName -Raw | ConvertFrom-Json -Depth 100 | Out-Null
           }
-      - name: Install Bicep
-        run: az bicep install
-      - name: Build Bicep
-        run: az bicep build --file ./infra/main.bicep --stdout | Out-Null
