@@ -78,7 +78,7 @@
       "title": "Design optional Intune cleanup after successful archive and Entra deletion",
       "kind": "discovery",
       "priority": "P2",
-      "status": "proposed",
+      "status": "done",
       "wave": 3,
       "problem": "Post-v1 proposes Intune removal; Graph success and archival are strict prerequisites.",
       "scope": [
@@ -100,15 +100,21 @@
       "sources": [
         "TODO.md"
       ],
-      "evidence": [],
-      "blocker": null
+      "evidence": [
+        "At source baseline 08f5efa647f94d1414447973b6ee036a130c68b1, docs/intune-removal-plan.md defines an inert closed plan contract that keeps tenantId, Entra object id, Entra deviceId, Intune managedDevice id, exact archive/index versions and cleanupRunId distinct and bound. It requires unique non-collapsing pre-archive discovery, exact-version archive readback, Entra DELETE acknowledgement plus direct absence observation, and post-Entra direct Intune target revalidation; labels, users, same-tenant relationships and newest-heartbeat selection cannot establish ownership or authorization.",
+        "The refusal matrix blocks absent, incomplete, ambiguous, foreign, unknown, stale or conflicting evidence. Existing archivedDeletedDevices rows and archive-index v1.0 cannot mint a trustworthy plan after the fact because the summary drops SecretVersion and IndexSecretName while the index has no tenantId and permits a null Intune id. A future dedicated collector must create contemporaneous tenant-bound evidence; implementation, permission grant and live deletion remain separate authorized tasks.",
+        "Microsoft Graph v1.0 documentation reviewed 2026-10-13 identifies DELETE /deviceManagement/managedDevices/{managedDeviceId} with DeviceManagementManagedDevices.ReadWrite.All and active Intune tenant licensing. The design excludes the separate retire/wipe device actions. PowerShell 7.6.6 parser, JSON, canonical permission and backlog schemas, generated backlog, Markdown links, contract-example binding, git diff check and Pester 5.7.1 passed, 86/86. Pinned Bicep 0.46.1 compiled successfully and differed from tracked compiler 0.42.1 output only in nested _generator version/hash metadata. No tenant/auth/archive/provider call, deletion, permission grant, schedule, infrastructure or default change ran.",
+        "Independent review passed both original discovery/design criteria on 2026-10-13, including exact source mappings, unchanged current permission requirements, synthetic contract consistency and fresh primary Microsoft API documentation. This closes the design item only; no schema/generator/executor, deletion authorization, live absence or endpoint outcome is implemented or proven."
+      ],
+      "blocker": null,
+      "claim": null
     },
     {
       "id": "CLEAN-004",
       "title": "Design optional Defender cleanup after successful archive and Entra deletion",
       "kind": "discovery",
       "priority": "P2",
-      "status": "proposed",
+      "status": "done",
       "wave": 3,
       "problem": "Post-v1 proposes MDE removal with separate consent and API boundaries.",
       "scope": [
@@ -130,22 +136,29 @@
       "sources": [
         "TODO.md"
       ],
-      "evidence": [],
-      "blocker": null
+      "evidence": [
+        "At source baseline 2e5386f4da4537ee951037d11db41b3896c4f64b, current Microsoft primary documentation reviewed 2026-10-13 showed no supported machine-record deletion route in the published Defender for Endpoint API catalog. docs/defender-cleanup-design.md records this bounded unsupported gap without claiming universal absence. It documents the exact-ID offboard POST and its Machine.Offboard permission only as a separate endpoint lifecycle operation that is not chosen as an automatic deletion fallback.",
+        "The design distinguishes tenantId, Entra object id, Entra deviceId, Defender machine id, cleanupRunId and exact archive/index versions. It refuses hostname and latest-heartbeat inference, duplicate aadDeviceId rows, nullable or hunting-only machine IDs, mixed or stale evidence and absent exact-target authorization. Existing source collapses duplicate Defender inventory/hunting rows, archive-index v1.0 has no tenant binding, and the job summary loses archive/index versions, so existing records cannot mint a trustworthy action plan after the fact.",
+        "Published route requirements are recorded without granting or claiming effective permission: Machine.Read.All for inventory, Machine.Offboard for the separate offboard action, and the broad Machine.ReadWrite.All currently documented for exact-machine and machine-action reads as a least-privilege qualification gap. PowerShell 7.6.6 parser, JSON, canonical permission/backlog schemas, generated backlog, Markdown links, original-criteria preservation, protected-path comparison, git diff check and Pester 5.7.1 passed 86/86. Pinned Bicep 0.46.1 compiled successfully and differed from tracked output only in nested _generator version/hash metadata. No auth, provider, archive, tenant, endpoint action, permission grant, schedule, infrastructure, runtime, schema or default change ran.",
+        "Independent review passed both original discovery criteria on 2026-10-13: fresh primary API/permission documentation, the explicitly bounded unsupported deletion gap, real-source identity/provenance limitations, and no implied destructive authorization. This closes the design assessment only; offboarding is not selected, no executor or permission is added, and no service or endpoint result is proven."
+      ],
+      "blocker": null,
+      "claim": null
     },
     {
       "id": "CLEAN-005",
       "title": "Add optional NotOnboarded and Unmanaged dynamic-group proposals",
       "kind": "feature",
       "priority": "P2",
-      "status": "proposed",
+      "status": "done",
       "wave": 3,
       "problem": "The existing stale groups do not express these additional cohorts.",
       "scope": [
         "scripts/",
         "infra/",
         "docs/",
-        "azd-permissions.json"
+        "azd-permissions.json",
+        "tests/ (actual local proposal/classifier and disabled-boundary fixtures)"
       ],
       "acceptance": [
         "Preview membership and valid rule syntax from fixtures before any group creation.",
@@ -158,10 +171,22 @@
       "authorization": "local-only",
       "components": [],
       "sources": [
-        "TODO.md"
+        "TODO.md",
+        "docs/device-group-proposals.md",
+        "https://learn.microsoft.com/entra/identity/users/groups-dynamic-membership#rules-for-devices",
+        "https://learn.microsoft.com/defender-endpoint/api/get-machines",
+        "https://learn.microsoft.com/defender-endpoint/api/machine"
       ],
-      "evidence": [],
-      "blocker": null
+      "evidence": [
+        "At source baseline 0c5290ee1f91bf796d6c01b07ad638995a2d072e, scripts/New-DeviceDynamicGroupProposal.ps1 adds a default-disabled local-only proposal CLI. It produces deterministic prospective and existing-attribute previews from bounded provided fixtures, round-trips only the two canonical extensionAttribute equality rules, reports an empty permission set, publisherPresent=false and groupCreationReady=false, and contains no provider, attribute, group or lifecycle action path.",
+        "Unmanaged inclusion requires a complete fresh Intune fixture with no exact managedDevice.azureADDeviceId match. NotOnboarded inclusion requires exactly one fresh valid Defender machine record with an exact aadDeviceId match and onboardingStatus CanBeOnboarded. Tenant/hash/freshness mismatch, unavailable/NoData/incomplete collection, absent or ambiguous Defender matches, malformed or duplicate identity, unsupported state, and unowned or stale current attributes remain Unknown. The fixture declarations establish only provided-fixture consistency, not authenticated capture, ownership, authorization or published state.",
+        "PowerShell 7.6.6 parsed 16 files with zero errors. Pester 5.7.1 passed 109/109 with zero failed, skipped or not-run tests. Eight JSON files parsed; canonical backlog and permission schemas, both proposal fixture schemas, backlog semantics and generated Markdown, original criteria and unrelated-record preservation, relative Markdown links, protected runtime/workflow/infrastructure byte comparison, and tracked/new-file whitespace checks passed. Bicep was not recompiled because infra/main.bicep and its tracked JSON and parameters match the verified baseline bytes; hosted validation will compile the unchanged source. No authentication, provider, tenant, archive, endpoint, permission, attribute, group, lifecycle, schedule or infrastructure action ran.",
+        "Independent review correction validates raw JSON collection and scalar types before classification: object-shaped devices or records, array-shaped GUIDs, malformed attribute objects, and non-integer attribute slots remain bounded Unknown instead of being coerced into positive evidence. Prospective and existing-attribute previews remain independent, valid empty Intune records remain a complete no-match inventory, and kind values are normalized before rule round-trip checks. Focused Pester 5.7.1 passed 32/32 with zero failed, skipped or not-run tests on PowerShell 7.6.6. The earlier full 109/109 result is inherited and was not rerun for this narrow correction; hosted validation will run the full suite.",
+        "The consolidated scalar-contract correction preserves JSON arrays only for declared devices and records collections. Every declared provider-fixture scalar is type-checked before comparison or parsing; singleton arrays for Defender machine id, onboardingStatus, source type, collection state, fixture schemaVersion or fixture kind cannot qualify membership. ConvertFrom-Json -NoEnumerate plus an explicit top-level object check also rejects a singleton top-level JSON array. Actual helper and file-CLI regressions passed in focused Pester 5.7.1: 39/39 with zero failed, skipped or not-run tests on PowerShell 7.6.6. Other suites were unchanged and not rerun; the earlier full 109/109 result remains inherited and hosted validation remains pending.",
+        "Independent actual-helper and file-CLI review passed the complete scalar/collection boundary on PowerShell 7.6.6, preserving valid empty arrays and prospective/current-attribute independence. Both original local-only criteria are implemented. Focused Pester 5.7.1 passed 39/39 with no failures or skips; prior 109-test full-suite evidence is inherited for unchanged areas, not a full corrected-source rerun. Fresh hosted full validation and compilation are publication gates before merge. This completion records only offline provided-fixture proposals: authenticated capture, ownership, attribute publishing, Entra service-side rule validation, group creation, effective permissions and lifecycle integration remain separate unimplemented or unproven work."
+      ],
+      "blocker": null,
+      "claim": null
     },
     {
       "id": "CLEAN-006",
@@ -476,6 +501,44 @@
       "evidence": [
         "2026-10-07 reproduced the prior helper failure on exact base f21713c7e58b897db2124a49060a15c5a6f13f54 before transport: SecretName?api was parsed as one undefined variable. Braced SecretName in both existing request expressions. Exact PUT and GET URI assertions exercise production helpers through mocked transport under strict mode; no test injects the missing variable.",
         "Full Pester 5.7.1 passed 32/32, zero failed/skipped/not-run; parser, JSON, Bicep and canonical backlog/generated view checks passed. Live archive creation and real recovery acceptance remain separate."
+      ],
+      "blocker": null,
+      "claim": null
+    },
+    {
+      "id": "CLEAN-014",
+      "title": "Complete the supported PowerShell and Pester validation baseline",
+      "kind": "maintenance",
+      "priority": "P1",
+      "status": "done",
+      "wave": 0,
+      "problem": "CI still selected Pester 5.7.1 and could accept inconclusive or skipped tests; several maintained entrypoints had no runtime declaration.",
+      "scope": [
+        "Owned authoring/runbook runtime declarations and POSIX prerequisite message",
+        "CI runtime/Pester selection and complete-outcome gate",
+        "Contributor validation guidance and permission evidence hashes"
+      ],
+      "acceptance": [
+        "Owned script/runbook entrypoints require PowerShell 7.6+; CI uses verified PowerShell 7.6.6 and exact Pester 6.2.0.",
+        "Every registered test passes; missing, empty, failed, skipped, inconclusive or unexecuted results fail CI.",
+        "Preserve device action defaults, archive/recovery transport, wire dates, permissions and notification draft history."
+      ],
+      "validation": [
+        "Import-Module Pester -RequiredVersion 6.2.0 -Force; Invoke-Pester ./tests -PassThru",
+        "Parse owned PowerShell and JSON; build infra/main.bicep without changing tracked generated output.",
+        "Validate canonical backlog schema, regenerate docs/backlog.md and verify permission-evidence hashes.",
+        "Exercise actual original/current CI Pester blocks against isolated pass, inconclusive, mixed-skip, all-skip, empty and failure fixtures."
+      ],
+      "dependencies": [],
+      "authorization": "local-only",
+      "components": [],
+      "sources": [
+        "https://github.com/nathanmcnulty/azd-device-cleanup/issues/22"
+      ],
+      "evidence": [
+        "Reviewed exact current main 54d827649f00e1956faa5cfe2c7915bfde47eef7 and open notification draft #18 before editing. All six owned script/runbook files now declare PowerShell 7.6 (five added guards); the POSIX missing-runtime message agrees. CI installs/imports exact Pester 6.2.0 and selects the reviewed SHA-256-verified PowerShell 7.6.6 archive; contributor validation enforces the same no-omission result contract.",
+        "Full PowerShell 7.6.6/.NET 10.0.12/Pester 6.2.0 suite passes 125/125 with zero failed, skipped, inconclusive or unexecuted tests; parser, JSON, Bicep 0.42.1 and canonical permission schema pass. Only LF UTF-8 source-evidence hashes changed in azd-permissions.json after adding declarations; permission semantics and existing safety tests are unchanged. No Azure/authentication, device action, archive read or tenant cleanup occurred. CLEAN-002 native recovery gate remains open.",
+        "Twelve isolated PowerShell 7.6.6/Pester 6.2.0 processes execute the actual original/current CI Pester blocks. The original accepts inconclusive, mixed-skipped and all-skipped fixtures; the corrected gate accepts only the passing fixture and rejects those cases plus empty and failing suites. Registered product tests and assertions remain intact."
       ],
       "blocker": null,
       "claim": null

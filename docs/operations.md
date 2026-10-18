@@ -56,6 +56,9 @@ If Defender sources are unavailable, the run skips disable/delete actions rather
 - Archive retrieval or Key Vault write failures **do** block deletion for the affected device and produce a partial-success failure notification without stopping the remaining candidate batch.
 - Archived device records now include correlation metadata (`cleanupRunId`, heartbeat source, and per-system identifiers) to make notifications and recovery lookups line up.
 - The current implementation deletes only the Entra device. Intune and Defender for Endpoint cleanup can be added around the same archive record later.
+- The post-v1 [Intune managed-device removal plan](intune-removal-plan.md) defines the inert identity, receipt, provenance, and refusal contract. It adds no Intune write path or permission.
+- The post-v1 [Defender machine cleanup API assessment](defender-cleanup-design.md) records that the reviewed published API surface has no supported machine-record deletion route. Offboarding is a separate endpoint lifecycle action and is not an automatic fallback.
+- The [optional device dynamic-group proposal tool](device-group-proposals.md) previews exact Unmanaged and NotOnboarded predicates from provided fixtures only. It does not read tenant data, publish attributes, create groups, request permissions, or affect lifecycle selection.
 
 ## Cleanup
 
