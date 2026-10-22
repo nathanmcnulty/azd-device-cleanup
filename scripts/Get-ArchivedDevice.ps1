@@ -151,11 +151,19 @@ function Get-KeyVaultSecretMetadata {
   Assert-KeyVaultName -VaultName $VaultName
   $VaultName = $VaultName.ToLowerInvariant()
   $items = @()
-  $uri = "https://$VaultName.vault.azure.net/secrets?api-version=7.4"
+  $maxItems = 5000
+  # Key Vault returns at most 25 items per page, and may return fewer.
+  # Allow one request per permitted item plus a terminal/overflow page,
+  # with a separate no-progress limit for empty-page continuations.
+  $maxPages = $maxItems + 1
+  $maxConsecutiveEmptyPages = 20
+  $consecutiveEmptyPages = 0
+  $uri = "https://$VaultName.vault.azure.net/secrets?api-version=7.4&maxresults=25"
   $visitedUris = @{}
   $pageCount = 0
   while (-not [string]::IsNullOrWhiteSpace($uri)) {
-    if ($pageCount -ge 20) { throw 'Key Vault metadata pagination exceeded its page limit.' }
+    if ($pageCount -ge $maxPages) { throw 'Key Vault metadata pagination exceeded its page limit.' }
+    if ($consecutiveEmptyPages -ge $maxConsecutiveEmptyPages) { throw 'Key Vault metadata pagination exceeded its empty-page limit.' }
     if ($visitedUris.ContainsKey($uri)) {
       throw 'Key Vault metadata pagination repeated a continuation URI.'
     }
@@ -173,9 +181,11 @@ function Get-KeyVaultSecretMetadata {
     $response = Invoke-KeyVaultJson -Method 'GET' -Uri $uri -VaultName $VaultName
     $pageCount++
     $values = Get-OptionalPropertyValue -Object $response -Name 'value'
+    if ($null -eq $values -or @($values).Count -eq 0) { $consecutiveEmptyPages++ }
+    else { $consecutiveEmptyPages = 0 }
     if ($null -ne $values) {
       $items += @($values)
-      if ($items.Count -gt 5000) { throw 'Key Vault metadata listing exceeded its item limit.' }
+      if ($items.Count -gt $maxItems) { throw 'Key Vault metadata listing exceeded its item limit.' }
     }
 
     $uri = [string](Get-OptionalPropertyValue -Object $response -Name 'nextLink')
